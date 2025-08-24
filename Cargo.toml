@@ -75,10 +75,9 @@ tempfile = "3.8"
 # Profile optimizations
 [profile.release]
 opt-level = 3
-lto = true
+lto = "thin"
 codegen-units = 1
 panic = "abort"
-strip = true
 
 [profile.dev]
 opt-level = 1
@@ -86,6 +85,7 @@ debug = true
 
 # Android specific configurations
 [target.'cfg(target_os = "android")']
+rustflags = ["-C", "link-arg=-Wl,--export-dynamic"]
 # Linker configuration is handled by cargo-ndk
 
 # Features for different build configurations

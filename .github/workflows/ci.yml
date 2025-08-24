@@ -136,11 +136,17 @@ jobs:
           echo "✓ Rust library found: $RUST_LIB"
           echo "Size: $(stat -c%s "$RUST_LIB") bytes"
           
+          # Show all available symbols for debugging
+          echo "Available symbols in Rust library:"
+          $ANDROID_NDK_HOME/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-nm "$RUST_LIB" 2>/dev/null | head -20 || echo "No symbols found or nm failed"
+          
           # Check for required C exports
           if $ANDROID_NDK_HOME/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-nm "$RUST_LIB" | grep -q "aubo_initialize"; then
             echo "✓ aubo_initialize symbol found"
           else
             echo "✗ aubo_initialize symbol missing"
+            echo "Available symbols containing 'aubo':"
+            $ANDROID_NDK_HOME/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-nm "$RUST_LIB" 2>/dev/null | grep -i aubo || echo "No aubo symbols found"
             exit 1
           fi
         else

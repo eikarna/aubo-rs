@@ -554,12 +554,13 @@ fn create_default_config(config_path: &str) -> Result<AuboConfig> {
 
 /// C-compatible initialization function
 #[no_mangle]
-pub extern "C" fn aubo_initialize(config_path: *const c_char) -> c_int {
-    let config_path = unsafe {
+#[export_name = "aubo_initialize"]
+pub unsafe extern "C" fn aubo_initialize(config_path: *const c_char) -> c_int {
+    let config_path = {
         if config_path.is_null() {
             return -1;
         }
-        match CStr::from_ptr(config_path).to_str() {
+        match unsafe { CStr::from_ptr(config_path) }.to_str() {
             Ok(path) => path,
             Err(_) => return -1,
         }
@@ -582,7 +583,8 @@ pub extern "C" fn aubo_initialize(config_path: *const c_char) -> c_int {
 
 /// C-compatible shutdown function
 #[no_mangle]
-pub extern "C" fn aubo_shutdown() -> c_int {
+#[export_name = "aubo_shutdown"]
+pub unsafe extern "C" fn aubo_shutdown() -> c_int {
     match shutdown() {
         Ok(_) => 0,
         Err(e) => {
@@ -594,27 +596,28 @@ pub extern "C" fn aubo_shutdown() -> c_int {
 
 /// C-compatible request blocking check
 #[no_mangle]
-pub extern "C" fn aubo_should_block_request(
+#[export_name = "aubo_should_block_request"]
+pub unsafe extern "C" fn aubo_should_block_request(
     url: *const c_char,
     request_type: *const c_char,
     origin: *const c_char,
 ) -> c_int {
-    let (url, request_type, origin) = unsafe {
+    let (url, request_type, origin) = {
         if url.is_null() || request_type.is_null() || origin.is_null() {
             return 0;
         }
         
-        let url = match CStr::from_ptr(url).to_str() {
+        let url = match unsafe { CStr::from_ptr(url) }.to_str() {
             Ok(s) => s,
             Err(_) => return 0,
         };
         
-        let request_type = match CStr::from_ptr(request_type).to_str() {
+        let request_type = match unsafe { CStr::from_ptr(request_type) }.to_str() {
             Ok(s) => s,
             Err(_) => return 0,
         };
         
-        let origin = match CStr::from_ptr(origin).to_str() {
+        let origin = match unsafe { CStr::from_ptr(origin) }.to_str() {
             Ok(s) => s,
             Err(_) => return 0,
         };
