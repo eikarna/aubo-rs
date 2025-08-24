@@ -135,7 +135,7 @@ fi
 
 # Move library to correct location
 if [ -f "$MODPATH/lib/arm64/lib$SONAME.so" ]; then
-    mv "$MODPATH/lib/arm64/lib$SONAME.so" "$MODPATH/lib/$SONAME.so"
+    mv "$MODPATH/lib/arm64/lib$SONAME.so" "$MODPATH/lib/lib$SONAME.so"
     rm -rf "$MODPATH/lib/arm64"
     log_info "Native library installed successfully"
 else
@@ -215,8 +215,8 @@ echo "" >> "$LOG_FILE"
 
 # File Verification
 echo "=== Critical Files ===" >> "$LOG_FILE"
-if [ -f "$MODULE_PATH/lib/aubo_rs.so" ]; then
-    SIZE=$(stat -c%s "$MODULE_PATH/lib/aubo_rs.so" 2>/dev/null || echo "0")
+if [ -f "$MODULE_PATH/lib/libaubo_rs.so" ]; then
+    SIZE=$(stat -c%s "$MODULE_PATH/lib/libaubo_rs.so" 2>/dev/null || echo "0")
     echo "✓ Native library: $SIZE bytes" >> "$LOG_FILE"
 else
     echo "✗ Native library: MISSING" >> "$LOG_FILE"
@@ -299,7 +299,7 @@ fi
 echo ""
 echo "--- System Checks ---"
 # Module files
-if [ -f "/data/adb/modules/aubo_rs/lib/aubo_rs.so" ]; then
+if [ -f "/data/adb/modules/aubo_rs/lib/libaubo_rs.so" ]; then
     echo "✅ Native library: Installed"
 else
     echo "❌ Native library: Missing"
@@ -355,7 +355,7 @@ log_info "Running final verification..."
 
 # Final verification
 ERRORS=0
-CRITICAL_FILES="$MODPATH/lib/$SONAME.so $DATA_DIR/aubo-rs.toml $DATA_DIR/status.txt $DATA_DIR/check_status.sh $DATA_DIR/health_check.sh"
+CRITICAL_FILES="$MODPATH/lib/lib$SONAME.so $DATA_DIR/aubo-rs.toml $DATA_DIR/status.txt $DATA_DIR/check_status.sh $DATA_DIR/health_check.sh"
 for file in $CRITICAL_FILES; do
     if [ ! -f "$file" ]; then
         log_error "Critical file missing: $file"
@@ -386,7 +386,7 @@ zygiskNextDetected=true
 # File Locations
 dataDir=$DATA_DIR
 configFile=$DATA_DIR/aubo-rs.toml
-nativeLib=$MODPATH/lib/$SONAME.so
+nativeLib=$MODPATH/lib/lib$SONAME.so
 statusFile=$DATA_DIR/status.txt
 healthCheck=$DATA_DIR/health_check.sh
 statusCheck=$DATA_DIR/check_status.sh

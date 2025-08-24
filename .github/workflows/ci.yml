@@ -136,6 +136,7 @@ jobs:
         
         sed -i "s/@DEBUG@/false/g" build/module/customize.sh
         sed -i "s/@SONAME@/aubo_rs/g" build/module/customize.sh
+        sed -i "s/@VERSION@/${{ steps.version.outputs.version }} (${{ steps.version.outputs.code }}-${{ steps.version.outputs.hash }})/g" build/module/customize.sh
         sed -i "s/@SUPPORTED_ABIS@/arm64/g" build/module/customize.sh
         sed -i "s/@MIN_SDK@/${{ env.ANDROID_API_LEVEL }}/g" build/module/customize.sh
     
