@@ -232,6 +232,9 @@ jobs:
         echo "Checking artifacts directory:"
         ls -la artifacts/ || echo "No artifacts directory found"
         
+        echo "Complete artifacts directory tree:"
+        find artifacts/ -type f 2>/dev/null | head -20 || echo "No files found in artifacts/"
+        
         echo "Checking current directory:"
         ls -la . || echo "Cannot list current directory"
         
@@ -241,6 +244,8 @@ jobs:
         echo "Checking if files exist:"
         [ -f "artifacts/libaubo_rs.so" ] && echo "✓ libaubo_rs.so found" || echo "✗ libaubo_rs.so missing"
         [ -f "artifacts/aubo_module.so" ] && echo "✓ aubo_module.so found" || echo "✗ aubo_module.so missing"
+        [ -f "artifacts/release/libaubo_rs.so" ] && echo "✓ release/libaubo_rs.so found" || echo "✗ release/libaubo_rs.so missing"
+        [ -f "artifacts/debug/libaubo_rs.so" ] && echo "✓ debug/libaubo_rs.so found" || echo "✗ debug/libaubo_rs.so missing"
         
         # If both download attempts failed, exit
         if [ "${{ steps.download-release.outcome }}" = "failure" ] && [ "${{ steps.download-debug.outcome }}" = "failure" ]; then
@@ -269,7 +274,7 @@ jobs:
         CPP_MODULE_FOUND=false
         
         # Check for Rust library in various locations
-        for path in "artifacts/libaubo_rs.so" "artifacts/target/aarch64-linux-android/release/libaubo_rs.so" "target/aarch64-linux-android/release/libaubo_rs.so"; do
+        for path in "artifacts/libaubo_rs.so" "artifacts/release/libaubo_rs.so" "artifacts/debug/libaubo_rs.so" "artifacts/target/aarch64-linux-android/release/libaubo_rs.so" "artifacts/target/aarch64-linux-android/debug/libaubo_rs.so" "target/aarch64-linux-android/release/libaubo_rs.so"; do
           if [ -f "$path" ]; then
             echo "✓ Found Rust library at: $path"
             cp "$path" build/module/lib/arm64/libaubo_rs.so
