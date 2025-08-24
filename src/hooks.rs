@@ -3,27 +3,38 @@
 use std::collections::HashMap;
 use std::ffi::{CStr, CString};
 use std::net::IpAddr;
-use std::os::raw::{c_char, c_int, c_void};
+use std::os::raw::c_void;
 use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 use std::sync::Arc;
 use std::time::Instant;
 
-use log::{debug, error, info, warn};
-use parking_lot::{Mutex, RwLock};
+use log::{debug, error, info};
+use parking_lot::RwLock;
 
 use crate::config::AuboConfig;
 use crate::engine::FilterEngine;
 use crate::error::{HookError, Result};
 use crate::stats::StatsCollector;
-use crate::zygisk::{get_zygisk_api, ZygiskAPI};
+use crate::zygisk::{get_zygisk_api, ZygiskApi};
 
 /// Network function hook information
-#[derive(Debug, Clone)]
+#[derive(Debug)]
 pub struct HookInfo {
     pub name: String,
     pub library: String,
     pub original_fn: *mut c_void,
     pub installed: AtomicBool,
+}
+
+impl Clone for HookInfo {
+    fn clone(&self) -> Self {
+        Self {
+            name: self.name.clone(),
+            library: self.library.clone(),
+            original_fn: self.original_fn,
+            installed: AtomicBool::new(self.installed.load(Ordering::SeqCst)),
+        }
+    }
 }
 
 unsafe impl Send for HookInfo {}
@@ -46,7 +57,7 @@ pub struct NetworkHooks {
     filter_engine: Arc<FilterEngine>,
     stats: Arc<StatsCollector>,
     hooks: RwLock<HashMap<String, HookInfo>>,
-    zygisk_api: Option<Arc<ZygiskAPI>>,
+    zygisk_api: Option<&'static ZygiskApi>,
     request_counter: AtomicUsize,
     blocked_counter: AtomicUsize,
 }
@@ -102,11 +113,15 @@ impl NetworkHooks {
     /// Install a specific network hook
     fn install_hook(
         &self,
-        api: &ZygiskAPI,
+        api: &ZygiskApi,
         hook_config: &crate::config::HookFunction,
     ) -> Result<()> {
-        let resolver = api.create_symbol_resolver(&hook_config.library, None)?;
-        let (symbol_addr, _) = resolver.lookup_symbol(&hook_config.name, false)?;
+        let resolver = api.new_symbol_resolver(&hook_config.library)?;
+        let (symbol_addr, _) = resolver.lookup_symbol(&hook_config.name)?
+            .ok_or_else(|| HookError::SymbolNotFound {
+                symbol: hook_config.name.clone(),
+                library: hook_config.library.clone(),
+            })?;
 
         // For now, just create placeholder hooks
         let hook_fn = std::ptr::null_mut::<c_void>();

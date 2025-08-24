@@ -3,7 +3,6 @@
 // and generates bindings for C interoperability.
 
 use std::env;
-use std::path::PathBuf;
 
 fn main() {
     println!("cargo:rerun-if-changed=build.rs");
@@ -17,9 +16,12 @@ fn main() {
         configure_android_build();
     }
 
-    // Generate C bindings if bindgen is available
+    // Generate C bindings if bindgen feature is enabled
     #[cfg(feature = "bindgen")]
-    generate_bindings();
+    {
+        use std::path::PathBuf;
+        generate_bindings();
+    }
 
     // Set up linking for Android
     setup_android_linking();
@@ -43,7 +45,7 @@ fn generate_bindings() {
     
     // Generate bindings for ZygiskNext API
     let bindings = bindgen::Builder::default()
-        .header("src/zygisk_api.h")
+        .header("zygisk_next_api.h")
         .parse_callbacks(Box::new(bindgen::CargoCallbacks))
         .generate()
         .expect("Unable to generate bindings");

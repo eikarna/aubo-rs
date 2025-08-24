@@ -3,9 +3,8 @@
 //! This module provides safe Rust bindings for the ZygiskNext API,
 //! enabling system-level process injection and hooking capabilities.
 
-use std::ffi::{c_char, c_int, c_void, CStr, CString};
-use std::mem;
-use std::os::raw::c_uchar;
+use std::ffi::{c_char, c_int, c_void, CString};
+
 use std::ptr;
 
 use crate::error::{Result, ZygiskError};
@@ -177,6 +176,23 @@ impl ZygiskApi {
         }
     }
 
+    /// Remove inline hook
+    pub fn inline_unhook(&self, original_fn: *mut c_void) -> Result<()> {
+        let result = unsafe {
+            ((*self.api).inline_unhook)(original_fn)
+        };
+
+        if result == ZN_SUCCESS {
+            Ok(())
+        } else {
+            Err(ZygiskError::InjectionFailed {
+                process: "unknown".to_string(),
+                reason: "Inline hook removal failed".to_string(),
+            }
+            .into())
+        }
+    }
+
     /// Create symbol resolver
     pub fn new_symbol_resolver(&self, library_path: &str) -> Result<SymbolResolver> {
         let path_cstr = CString::new(library_path).map_err(|_| {
@@ -277,13 +293,17 @@ pub fn get_zygisk_api() -> Option<&'static ZygiskApi> {
 /// # Safety
 /// This should only be called once during module initialization
 pub unsafe fn init_zygisk_api(api: *const ZygiskNextAPI, handle: *mut c_void) {
-    GLOBAL_ZYGISK_API = Some(ZygiskApi::new(api, handle));
+    unsafe {
+        GLOBAL_ZYGISK_API = Some(ZygiskApi::new(api, handle));
+    }
 }
 
 /// Module loaded callback implementation
 unsafe extern "C" fn on_module_loaded(self_handle: *mut c_void, api: *const ZygiskNextAPI) {
     // Initialize the global API
-    init_zygisk_api(api, self_handle);
+    unsafe {
+        init_zygisk_api(api, self_handle);
+    }
 
     // Call the Rust initialization
     if let Err(e) = crate::initialize_from_zygisk() {

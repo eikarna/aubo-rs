@@ -411,7 +411,7 @@ impl AuboConfig {
         }
 
         let content = fs::read_to_string(path)
-            .map_err(|e| AuboError::Config(ConfigError::PermissionDenied {
+            .map_err(|_e| AuboError::Config(ConfigError::PermissionDenied {
                 path: path.to_string_lossy().to_string(),
             }))?;
 

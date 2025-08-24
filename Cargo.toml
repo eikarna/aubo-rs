@@ -49,8 +49,10 @@ rayon = "1.8"
 crossbeam = "0.8"
 bytes = "1.5"
 smallvec = "1.11"
+num_cpus = "1.16"
 
-# Android specific
+# Android specific (only when targeting Android)
+[target.'cfg(target_os = "android")'.dependencies]
 jni = "0.21"
 ndk = "0.8"
 ndk-sys = "0.5"
@@ -82,11 +84,8 @@ opt-level = 1
 debug = true
 
 # Android specific configurations
-[target.aarch64-linux-android]
-linker = "aarch64-linux-android-clang"
-
-[target.armv7-linux-androideabi]
-linker = "armv7a-linux-androideabi-clang"
+[target.'cfg(target_os = "android")']
+# Linker configuration is handled by cargo-ndk
 
 # Features for different build configurations
 [features]
@@ -96,23 +95,12 @@ filter-engine = []
 network-hooks = []
 performance-monitoring = []
 debug-logging = []
+bindgen = []
 
-# Workspace configuration
-[workspace]
-members = [
-    "aubo-core",
-    "aubo-filters",
-    "aubo-hooks", 
-    "aubo-config",
-    "aubo-stats",
-    "tools/filter-compiler",
-    "tools/benchmarks"
-]
+# Note: This is a single-crate project, not a workspace
+# All functionality is contained in src/ directory
 
+# Benchmarks
 [[bench]]
-name = "filter_performance"
-harness = false
-
-[[bench]]
-name = "network_interception"
+name = "performance"
 harness = false

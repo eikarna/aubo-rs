@@ -1,3 +1,197 @@
+use std::collections::HashMap;
+use std::sync::Arc;
+use std::time::{SystemTime, UNIX_EPOCH};
+use parking_lot::RwLock;
+use serde::{Deserialize, Serialize};
+use crate::error::{AuboError, StatsError};
+
+/// Performance metrics for the ad blocker
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct PerformanceMetrics {
+    pub avg_processing_time_us: u64,
+    pub memory_usage_bytes: u64,
+    pub cpu_usage_percent: f64,
+}
+
+impl Default for PerformanceMetrics {
+    fn default() -> Self {
+        Self {
+            avg_processing_time_us: 0,
+            memory_usage_bytes: 0,
+            cpu_usage_percent: 0.0,
+        }
+    }
+}
+
+/// Statistics about blocked and allowed requests
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct Stats {
+    pub total_requests: u64,
+    pub blocked_requests: u64,
+    pub allowed_requests: u64,
+    pub domains_blocked: HashMap<String, u64>,
+    pub request_types: HashMap<String, u64>,
+    pub performance_metrics: PerformanceMetrics,
+    pub start_time: u64,
+    pub last_updated: u64,
+}
+
+impl Default for Stats {
+    fn default() -> Self {
+        let now = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap_or_default()
+            .as_secs();
+        
+        Self {
+            total_requests: 0,
+            blocked_requests: 0,
+            allowed_requests: 0,
+            domains_blocked: HashMap::new(),
+            request_types: HashMap::new(),
+            performance_metrics: PerformanceMetrics::default(),
+            start_time: now,
+            last_updated: now,
+        }
+    }
+}
+
+/// Thread-safe statistics collector for aubo-rs
+#[derive(Debug)]
+pub struct StatsCollector {
+    stats: Arc<RwLock<Stats>>,
+    collecting: Arc<RwLock<bool>>,
+}
+
+impl StatsCollector {
+    /// Create a new statistics collector
+    pub fn new() -> Self {
+        Self {
+            stats: Arc::new(RwLock::new(Stats::default())),
+            collecting: Arc::new(RwLock::new(false)),
+        }
+    }
+
+    /// Start collecting statistics
+    pub fn start_collection(&self) -> Result<(), AuboError> {
+        let mut collecting = self.collecting.write();
+        *collecting = true;
+        Ok(())
+    }
+
+    /// Stop collecting statistics
+    pub fn stop_collection(&self) -> Result<(), AuboError> {
+        let mut collecting = self.collecting.write();
+        *collecting = false;
+        Ok(())
+    }
+
+    /// Record a blocked request
+    pub fn record_blocked_request(&self, domain: &str, request_type: &str) {
+        if !*self.collecting.read() {
+            return;
+        }
+
+        let mut stats = self.stats.write();
+        stats.total_requests += 1;
+        stats.blocked_requests += 1;
+        
+        // Update domain count
+        *stats.domains_blocked.entry(domain.to_string()).or_insert(0) += 1;
+        
+        // Update request type count
+        *stats.request_types.entry(request_type.to_string()).or_insert(0) += 1;
+        
+        // Update timestamp
+        stats.last_updated = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap_or_default()
+            .as_secs();
+    }
+
+    /// Record an allowed request
+    pub fn record_allowed_request(&self, _domain: &str, request_type: &str) {
+        if !*self.collecting.read() {
+            return;
+        }
+
+        let mut stats = self.stats.write();
+        stats.total_requests += 1;
+        stats.allowed_requests += 1;
+        
+        // Update request type count
+        *stats.request_types.entry(request_type.to_string()).or_insert(0) += 1;
+        
+        // Update timestamp
+        stats.last_updated = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap_or_default()
+            .as_secs();
+    }
+
+    /// Get a snapshot of current statistics
+    pub fn get_stats(&self) -> Stats {
+        self.stats.read().clone()
+    }
+
+    /// Update performance metrics
+    pub fn update_performance_metrics(
+        &self,
+        avg_processing_time_us: u64,
+        memory_usage_bytes: u64,
+        cpu_usage_percent: f64,
+    ) {
+        let mut stats = self.stats.write();
+        stats.performance_metrics.avg_processing_time_us = avg_processing_time_us;
+        stats.performance_metrics.memory_usage_bytes = memory_usage_bytes;
+        stats.performance_metrics.cpu_usage_percent = cpu_usage_percent;
+        
+        stats.last_updated = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap_or_default()
+            .as_secs();
+    }
+
+    /// Reset all statistics
+    pub fn reset(&self) {
+        let mut stats = self.stats.write();
+        *stats = Stats::default();
+    }
+
+    /// Get statistics as JSON string
+    pub fn to_json(&self) -> Result<String, AuboError> {
+        let stats = self.get_stats();
+        serde_json::to_string_pretty(&stats)
+            .map_err(|e| AuboError::Stats(StatsError::SerializationError { 
+                message: e.to_string() 
+            }))
+    }
+
+    /// Save statistics to file
+    pub fn save_to_file(&self, path: &str) -> Result<(), AuboError> {
+        let json = self.to_json()?;
+        std::fs::write(path, json)
+            .map_err(|e| AuboError::Stats(StatsError::IoError { 
+                message: format!("Failed to write stats to {}: {}", path, e) 
+            }))
+    }
+}
+
+impl Default for StatsCollector {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+impl Clone for StatsCollector {
+    fn clone(&self) -> Self {
+        Self {
+            stats: Arc::clone(&self.stats),
+            collecting: Arc::clone(&self.collecting),
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

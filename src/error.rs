@@ -38,8 +38,12 @@ pub enum AuboError {
     Json(#[from] serde_json::Error),
 
     /// TOML parsing errors
-    #[error("TOML error: {0}")]
-    Toml(#[from] toml::de::Error),
+    #[error("TOML parsing error: {0}")]
+    TomlParse(#[from] toml::de::Error),
+
+    /// TOML serialization errors
+    #[error("TOML serialization error: {0}")]
+    TomlSerialize(#[from] toml::ser::Error),
 
     /// URL parsing errors
     #[error("URL error: {0}")]
@@ -168,6 +172,14 @@ pub enum StatsError {
     /// Statistics corruption detected
     #[error("Statistics file corruption detected: {details}")]
     Corruption { details: String },
+
+    /// Serialization error
+    #[error("Statistics serialization error: {message}")]
+    SerializationError { message: String },
+
+    /// I/O error
+    #[error("Statistics I/O error: {message}")]
+    IoError { message: String },
 }
 
 /// ZygiskNext integration specific errors

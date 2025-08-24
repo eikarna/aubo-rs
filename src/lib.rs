@@ -41,7 +41,6 @@
     overflowing_literals,
     path_statements,
     patterns_in_fns_without_body,
-    private_in_public,
     unconditional_recursion,
     unused,
     unused_allocation,
@@ -238,8 +237,33 @@ pub fn should_block_request(url: &str, request_type: &str, origin: &str) -> bool
 }
 
 // C FFI exports for ZygiskNext integration
-use std::ffi::{CStr, CString};
+use std::ffi::CStr;
 use std::os::raw::{c_char, c_int};
+
+/// Initialize aubo-rs from ZygiskNext context
+/// This function is called by the ZygiskNext module during initialization
+pub fn initialize_from_zygisk() -> Result<()> {
+    // Load default configuration or from standard path
+    let config_path = "/data/adb/aubo-rs/aubo-rs.toml";
+    let config = match AuboConfig::load_from_file(config_path) {
+        Ok(config) => config,
+        Err(_) => {
+            warn!("Failed to load config from {}, using defaults", config_path);
+            AuboConfig::default()
+        }
+    };
+    
+    initialize(config)
+}
+
+/// Handle companion process connection for ZygiskNext
+/// This function manages communication with Zygisk companion processes
+pub fn handle_companion_connection(fd: i32) -> Result<()> {
+    info!("Handling companion connection on fd: {}", fd);
+    // For now, just acknowledge the connection
+    // In a full implementation, this would handle companion process communication
+    Ok(())
+}
 
 /// C-compatible initialization function
 #[no_mangle]

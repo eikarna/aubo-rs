@@ -3,7 +3,7 @@
 use std::collections::HashMap;
 use std::fs;
 use std::path::Path;
-use std::time::Instant;
+use std::time::SystemTime;
 
 use log::{debug, error, info, warn};
 use reqwest;
@@ -19,7 +19,7 @@ pub struct FilterListMetadata {
     pub name: String,
     pub url: Url,
     pub list_type: FilterListType,
-    pub last_updated: Option<Instant>,
+    pub last_updated: Option<SystemTime>,
     pub rule_count: usize,
     pub enabled: bool,
 }
@@ -95,7 +95,7 @@ impl FilterManager {
         
         // Update metadata
         if let Some(metadata) = self.lists.get_mut(name) {
-            metadata.last_updated = Some(Instant::now());
+            metadata.last_updated = Some(SystemTime::now());
             metadata.rule_count = rules.len();
         }
 
