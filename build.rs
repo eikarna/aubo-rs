@@ -60,7 +60,13 @@ fn build_cpp_module() {
     
     let build_dir = PathBuf::from("target").join(&target).join("cpp_build");
     
-    // Create build directory
+    // Clean and create build directory to avoid CMake cache issues
+    if build_dir.exists() {
+        if let Err(e) = std::fs::remove_dir_all(&build_dir) {
+            println!("cargo:warning=Failed to clean C++ build directory: {}", e);
+        }
+    }
+    
     if let Err(e) = std::fs::create_dir_all(&build_dir) {
         println!("cargo:warning=Failed to create C++ build directory: {}", e);
         return;

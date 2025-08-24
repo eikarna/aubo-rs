@@ -104,8 +104,9 @@ build_rust() {
 build_cpp() {
     log_step "Building C++ ZygiskNext module (simulating CI)"
     
-    # Create build directory
+    # Create clean build directory
     BUILD_DIR="target/aarch64-linux-android/cpp_build"
+    rm -rf "$BUILD_DIR"
     mkdir -p "$BUILD_DIR"
     cd "$BUILD_DIR"
     
@@ -116,8 +117,8 @@ build_cpp() {
           -DCMAKE_BUILD_TYPE=Release \
           ../../../src/cpp
     
-    log_info "Building with CMake..."
-    cmake --build . --config Release
+    log_info "Building with make..."
+    make -j$(nproc 2>/dev/null || echo 4)
     
     # Copy built module
     cp libaubo_module.so ../aubo_module.so

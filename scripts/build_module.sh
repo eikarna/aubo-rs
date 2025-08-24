@@ -105,8 +105,9 @@ build_rust() {
 build_cpp() {
     log_step "Building C++ ZygiskNext module"
     
-    # Create build directory
+    # Create clean build directory
     BUILD_DIR="target/aarch64-linux-android/cpp_build"
+    rm -rf "$BUILD_DIR"
     mkdir -p "$BUILD_DIR"
     
     # Set up NDK toolchain
@@ -127,9 +128,9 @@ build_cpp() {
           -DCMAKE_BUILD_TYPE=Release \
           ../../../src/cpp
     
-    # Build with CMake
+    # Build with make
     log_info "Building C++ module..."
-    cmake --build . --config Release
+    make -j$(nproc 2>/dev/null || echo 4)
     
     cd - > /dev/null
     

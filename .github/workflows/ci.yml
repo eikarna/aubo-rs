@@ -60,7 +60,7 @@ jobs:
     - name: Install CMake
       run: |
         sudo apt-get update
-        sudo apt-get install -y cmake ninja-build
+        sudo apt-get install -y cmake
     
     - name: Install cargo-ndk
       run: cargo install cargo-ndk
@@ -85,6 +85,12 @@ jobs:
     
     - name: Test network features on host
       run: cargo check --features "network"
+    
+    - name: Clean build artifacts
+      run: |
+        # Clean any existing build artifacts to ensure fresh build
+        rm -rf target/aarch64-linux-android/
+        cargo clean --target aarch64-linux-android
 
     - name: Build Rust library for Android
       run: |
@@ -101,20 +107,21 @@ jobs:
           BUILD_TYPE="Debug"
         fi
         
-        # Create build directory
-        mkdir -p target/aarch64-linux-android/cpp_build
-        cd target/aarch64-linux-android/cpp_build
+        # Create clean build directory
+        BUILD_DIR="target/aarch64-linux-android/cpp_build"
+        rm -rf "$BUILD_DIR"
+        mkdir -p "$BUILD_DIR"
+        cd "$BUILD_DIR"
         
-        # Configure with CMake
+        # Configure with CMake using Unix Makefiles (more reliable in CI)
         cmake -DCMAKE_TOOLCHAIN_FILE=$ANDROID_NDK_HOME/build/cmake/android.toolchain.cmake \
               -DANDROID_ABI=arm64-v8a \
               -DANDROID_PLATFORM=android-${{ env.ANDROID_API_LEVEL }} \
               -DCMAKE_BUILD_TYPE=$BUILD_TYPE \
-              -G Ninja \
               ../../../src/cpp
         
-        # Build with Ninja
-        ninja
+        # Build with make
+        make -j$(nproc)
         
         # Copy built module to expected location
         cp libaubo_module.so ../aubo_module.so
