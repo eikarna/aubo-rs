@@ -1,2 +1,2 @@
-aubo_module
-aubo_module:companion
+name=netd companion lib/libaubo_rs.so
+name=netd companion lib/aubo_module.so
