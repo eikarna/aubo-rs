@@ -17,7 +17,7 @@ crate-type = ["cdylib", "staticlib"]
 [dependencies]
 # Core dependencies for networking and async operations
 tokio = { version = "1.0", features = ["rt", "sync", "time", "macros"] }
-reqwest = { version = "0.11", features = ["json", "stream"] }
+reqwest = { version = "0.11", default-features = false, features = ["json", "stream", "rustls-tls"], optional = true }
 url = "2.5"
 regex = "1.10"
 serde = { version = "1.0", features = ["derive"] }
@@ -90,12 +90,13 @@ debug = true
 # Features for different build configurations
 [features]
 default = ["full"]
-full = ["filter-engine", "network-hooks", "performance-monitoring"]
+full = ["filter-engine", "network-hooks", "performance-monitoring", "network"]
 filter-engine = []
 network-hooks = []
 performance-monitoring = []
 debug-logging = []
 bindgen = []
+network = ["reqwest"]
 
 # Note: This is a single-crate project, not a workspace
 # All functionality is contained in src/ directory

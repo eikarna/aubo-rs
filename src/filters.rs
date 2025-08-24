@@ -6,6 +6,7 @@ use std::path::Path;
 use std::time::SystemTime;
 
 use log::{debug, error, info, warn};
+#[cfg(feature = "network")]
 use reqwest;
 use serde::{Deserialize, Serialize};
 use url::Url;
@@ -104,6 +105,7 @@ impl FilterManager {
     }
 
     /// Download filter list content
+    #[cfg(feature = "network")]
     async fn download_filter_list(&self, url: &Url) -> Result<String> {
         let response = reqwest::get(url.as_str())
             .await
@@ -123,6 +125,43 @@ impl FilterManager {
             })?;
 
         Ok(content)
+    }
+
+    /// Download filter list content (stub when network feature is disabled)
+    #[cfg(not(feature = "network"))]
+    async fn download_filter_list(&self, url: &Url) -> Result<String> {
+        Err(FilterError::DownloadFailed {
+            name: "unknown".to_string(),
+            url: url.to_string(),
+            reason: "Network feature disabled".to_string(),
+        })
+    }
+
+    /// Load filter list from local file
+    pub fn load_filter_list_from_file(&mut self, name: &str, file_path: &Path) -> Result<()> {
+        let content = std::fs::read_to_string(file_path)
+            .map_err(|e| FilterError::UpdateFailed {
+                reason: format!("Failed to read file {}: {}", file_path.display(), e),
+            })?;
+
+        let metadata = self.lists.get(name).ok_or_else(|| FilterError::ListNotFound {
+            name: name.to_string(),
+        })?;
+
+        // Parse the rules
+        let rules = self.parse_filter_content(&content, &metadata.list_type)?;
+        
+        // Cache the rules
+        self.rules_cache.insert(name.to_string(), rules.clone());
+        
+        // Update metadata
+        if let Some(metadata) = self.lists.get_mut(name) {
+            metadata.last_updated = Some(SystemTime::now());
+            metadata.rule_count = rules.len();
+        }
+
+        info!("Loaded filter list '{}' from file with {} rules", name, rules.len());
+        Ok(())
     }
 
     /// Parse filter list content based on type

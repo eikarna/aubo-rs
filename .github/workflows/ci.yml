@@ -71,13 +71,19 @@ jobs:
         echo "CC_aarch64_linux_android=$ANDROID_NDK_HOME/toolchains/llvm/prebuilt/linux-x86_64/bin/aarch64-linux-android${{ env.ANDROID_API_LEVEL }}-clang" >> $GITHUB_ENV
         echo "AR_aarch64_linux_android=$ANDROID_NDK_HOME/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-ar" >> $GITHUB_ENV
         echo "CARGO_TARGET_AARCH64_LINUX_ANDROID_LINKER=$ANDROID_NDK_HOME/toolchains/llvm/prebuilt/linux-x86_64/bin/aarch64-linux-android${{ env.ANDROID_API_LEVEL }}-clang" >> $GITHUB_ENV
+        echo "PKG_CONFIG_ALLOW_CROSS=1" >> $GITHUB_ENV
+        echo "OPENSSL_STATIC=1" >> $GITHUB_ENV
+        echo "OPENSSL_NO_VENDOR=1" >> $GITHUB_ENV
     
+    - name: Test network features on host
+      run: cargo check --features "network"
+
     - name: Build for Android
       run: |
         if [ "${{ matrix.build-type }}" = "release" ]; then
-          cargo build --target aarch64-linux-android --release
+          cargo build --target aarch64-linux-android --release --no-default-features --features "filter-engine,performance-monitoring"
         else
-          cargo build --target aarch64-linux-android
+          cargo build --target aarch64-linux-android --no-default-features --features "filter-engine,performance-monitoring"
         fi
     
     - name: Upload build artifacts
