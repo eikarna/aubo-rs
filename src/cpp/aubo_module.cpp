@@ -3,6 +3,9 @@
 #include <unistd.h>
 #include <string>
 #include <cstring>
+#include <sys/socket.h>
+#include <netdb.h>
+#include <netinet/in.h>
 
 #include "zygisk_next_api.h"
 
@@ -73,8 +76,8 @@ static int my_getaddrinfo(const char *node, const char *service, const struct ad
 static bool load_rust_library() {
     // Try different possible library locations
     const char* lib_paths[] = {
-        "/data/adb/modules/aubo_rs/lib/aubo_rs.so",
         "/data/adb/modules/aubo_rs/lib/libaubo_rs.so",
+        "/data/adb/modules/aubo_rs/lib/aubo_rs.so",
         "libaubo_rs.so"
     };
     
