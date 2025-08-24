@@ -123,7 +123,7 @@ jobs:
         # Build with make
         make -j$(nproc)
         
-        # Copy built module to expected location
+        # Copy built module from build directory to expected location
         cp libaubo_module.so ../aubo_module.so
         
         cd ../../..

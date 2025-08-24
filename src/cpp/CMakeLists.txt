@@ -1,4 +1,4 @@
-cmake_minimum_required(VERSION 3.18.1)
+cmake_minimum_required(VERSION 3.22.1)
 project(aubo_module)
 
 # Set C++ standard
@@ -29,10 +29,10 @@ target_link_libraries(aubo_module
     ${dl-lib}
 )
 
-# Set output name
+# Set output name and directory
 set_target_properties(aubo_module PROPERTIES
     OUTPUT_NAME "aubo_module"
-    LIBRARY_OUTPUT_DIRECTORY "${CMAKE_SOURCE_DIR}/../../lib"
+    LIBRARY_OUTPUT_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}"
 )
 
 # Strip symbols in release builds
