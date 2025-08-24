@@ -206,11 +206,47 @@ jobs:
     steps:
     - uses: actions/checkout@v4
     
-    - name: Download build artifacts
+    - name: Download build artifacts (release)
+      id: download-release
+      continue-on-error: true
       uses: actions/download-artifact@v4
       with:
         name: aubo-rs-modules-release
         path: artifacts/
+    
+    - name: Download build artifacts (debug fallback)
+      id: download-debug
+      if: steps.download-release.outcome == 'failure'
+      continue-on-error: true
+      uses: actions/download-artifact@v4
+      with:
+        name: aubo-rs-modules-debug
+        path: artifacts/
+    
+    - name: Debug artifact contents
+      run: |
+        echo "=== Debugging artifact download ==="
+        echo "Release download outcome: ${{ steps.download-release.outcome }}"
+        echo "Debug download outcome: ${{ steps.download-debug.outcome }}"
+        
+        echo "Checking artifacts directory:"
+        ls -la artifacts/ || echo "No artifacts directory found"
+        
+        echo "Checking current directory:"
+        ls -la . || echo "Cannot list current directory"
+        
+        echo "Looking for .so files:"
+        find . -name "*.so" -type f 2>/dev/null || echo "No .so files found"
+        
+        echo "Checking if files exist:"
+        [ -f "artifacts/libaubo_rs.so" ] && echo "✓ libaubo_rs.so found" || echo "✗ libaubo_rs.so missing"
+        [ -f "artifacts/aubo_module.so" ] && echo "✓ aubo_module.so found" || echo "✗ aubo_module.so missing"
+        
+        # If both download attempts failed, exit
+        if [ "${{ steps.download-release.outcome }}" = "failure" ] && [ "${{ steps.download-debug.outcome }}" = "failure" ]; then
+          echo "✗ Failed to download any artifacts"
+          exit 1
+        fi
     
     - name: Generate version info
       id: version
@@ -228,14 +264,66 @@ jobs:
       run: |
         mkdir -p build/module/lib/arm64
         
-        # Copy both libraries to the module structure
-        cp artifacts/libaubo_rs.so build/module/lib/arm64/
-        cp artifacts/aubo_module.so build/module/lib/arm64/
+        # Try to copy from different possible locations
+        RUST_LIB_FOUND=false
+        CPP_MODULE_FOUND=false
         
-        # Copy template files
+        # Check for Rust library in various locations
+        for path in "artifacts/libaubo_rs.so" "artifacts/target/aarch64-linux-android/release/libaubo_rs.so" "target/aarch64-linux-android/release/libaubo_rs.so"; do
+          if [ -f "$path" ]; then
+            echo "✓ Found Rust library at: $path"
+            cp "$path" build/module/lib/arm64/libaubo_rs.so
+            RUST_LIB_FOUND=true
+            break
+          fi
+        done
+        
+        # Check for C++ module in various locations
+        for path in "artifacts/aubo_module.so" "artifacts/target/aarch64-linux-android/aubo_module.so" "target/aarch64-linux-android/aubo_module.so"; do
+          if [ -f "$path" ]; then
+            echo "✓ Found C++ module at: $path"
+            cp "$path" build/module/lib/arm64/aubo_module.so
+            CPP_MODULE_FOUND=true
+            break
+          fi
+        done
+        
+        # Verify both libraries were found
+        if [ "$RUST_LIB_FOUND" = false ]; then
+          echo "✗ Rust library not found in any expected location"
+          echo "Available files in artifacts/:"
+          find artifacts/ -type f 2>/dev/null || echo "No files in artifacts/"
+          exit 1
+        fi
+        
+        if [ "$CPP_MODULE_FOUND" = false ]; then
+          echo "✗ C++ module not found in any expected location"
+          echo "Available files in artifacts/:"
+          find artifacts/ -type f 2>/dev/null || echo "No files in artifacts/"
+          exit 1
+        fi
+        
+        # Copy template files with error checking
+        if [ ! -d "template" ]; then
+          echo "✗ Template directory not found"
+          exit 1
+        fi
+        
+        echo "Copying template files..."
         cp -r template/* build/module/
+        
+        if [ ! -f "aubo-rs.toml" ]; then
+          echo "✗ aubo-rs.toml configuration file not found"
+          exit 1
+        fi
         cp aubo-rs.toml build/module/
-        cp README.md build/module/
+        
+        if [ ! -f "README.md" ]; then
+          echo "⚠ README.md not found, creating placeholder"
+          echo "# aubo-rs - System-wide Android Ad Blocker" > build/module/README.md
+        else
+          cp README.md build/module/
+        fi
         
         # Verify both libraries are present
         ls -la build/module/lib/arm64/
