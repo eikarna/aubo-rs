@@ -57,6 +57,14 @@ jobs:
       with:
         ndk-version: ${{ env.NDK_VERSION }}
     
+    - name: Install CMake
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y cmake ninja-build
+    
+    - name: Install cargo-ndk
+      run: cargo install cargo-ndk
+    
     - name: Cache dependencies
       uses: actions/cache@v3
       with:
@@ -78,19 +86,95 @@ jobs:
     - name: Test network features on host
       run: cargo check --features "network"
 
-    - name: Build for Android
+    - name: Build Rust library for Android
       run: |
         if [ "${{ matrix.build-type }}" = "release" ]; then
-          cargo build --target aarch64-linux-android --release --no-default-features --features "filter-engine,performance-monitoring"
+          cargo ndk -t arm64-v8a build --release --no-default-features --features "filter-engine,performance-monitoring"
         else
-          cargo build --target aarch64-linux-android --no-default-features --features "filter-engine,performance-monitoring"
+          cargo ndk -t arm64-v8a build --no-default-features --features "filter-engine,performance-monitoring"
         fi
+    
+    - name: Build C++ ZygiskNext module
+      run: |
+        BUILD_TYPE="Release"
+        if [ "${{ matrix.build-type }}" = "debug" ]; then
+          BUILD_TYPE="Debug"
+        fi
+        
+        # Create build directory
+        mkdir -p target/aarch64-linux-android/cpp_build
+        cd target/aarch64-linux-android/cpp_build
+        
+        # Configure with CMake
+        cmake -DCMAKE_TOOLCHAIN_FILE=$ANDROID_NDK_HOME/build/cmake/android.toolchain.cmake \
+              -DANDROID_ABI=arm64-v8a \
+              -DANDROID_PLATFORM=android-${{ env.ANDROID_API_LEVEL }} \
+              -DCMAKE_BUILD_TYPE=$BUILD_TYPE \
+              -G Ninja \
+              ../../../src/cpp
+        
+        # Build with Ninja
+        ninja
+        
+        # Copy built module to expected location
+        cp libaubo_module.so ../aubo_module.so
+        
+        cd ../../..
+    
+    - name: Validate built modules
+      run: |
+        echo "=== Validating Rust library ==="
+        RUST_LIB="target/aarch64-linux-android/${{ matrix.build-type }}/libaubo_rs.so"
+        if [ -f "$RUST_LIB" ]; then
+          echo "✓ Rust library found: $RUST_LIB"
+          echo "Size: $(stat -c%s "$RUST_LIB") bytes"
+          
+          # Check for required C exports
+          if $ANDROID_NDK_HOME/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-nm "$RUST_LIB" | grep -q "aubo_initialize"; then
+            echo "✓ aubo_initialize symbol found"
+          else
+            echo "✗ aubo_initialize symbol missing"
+            exit 1
+          fi
+        else
+          echo "✗ Rust library not found: $RUST_LIB"
+          exit 1
+        fi
+        
+        echo "=== Validating C++ ZygiskNext module ==="
+        CPP_MODULE="target/aarch64-linux-android/aubo_module.so"
+        if [ -f "$CPP_MODULE" ]; then
+          echo "✓ C++ module found: $CPP_MODULE"
+          echo "Size: $(stat -c%s "$CPP_MODULE") bytes"
+          
+          # Check for required ZygiskNext exports
+          if $ANDROID_NDK_HOME/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-nm "$CPP_MODULE" | grep -q "zn_module"; then
+            echo "✓ zn_module symbol found"
+          else
+            echo "✗ zn_module symbol missing"
+            exit 1
+          fi
+          
+          if $ANDROID_NDK_HOME/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-nm "$CPP_MODULE" | grep -q "zn_companion_module"; then
+            echo "✓ zn_companion_module symbol found"
+          else
+            echo "✗ zn_companion_module symbol missing"
+            exit 1
+          fi
+        else
+          echo "✗ C++ module not found: $CPP_MODULE"
+          exit 1
+        fi
+        
+        echo "=== All modules validated successfully ==="
     
     - name: Upload build artifacts
       uses: actions/upload-artifact@v4
       with:
-        name: libaubo_rs-${{ matrix.build-type }}
-        path: target/aarch64-linux-android/${{ matrix.build-type }}/libaubo_rs.so
+        name: aubo-rs-modules-${{ matrix.build-type }}
+        path: |
+          target/aarch64-linux-android/${{ matrix.build-type }}/libaubo_rs.so
+          target/aarch64-linux-android/aubo_module.so
 
   package:
     name: Package Magisk Module
@@ -104,7 +188,7 @@ jobs:
     - name: Download build artifacts
       uses: actions/download-artifact@v4
       with:
-        name: libaubo_rs-release
+        name: aubo-rs-modules-release
         path: artifacts/
     
     - name: Generate version info
@@ -122,10 +206,20 @@ jobs:
     - name: Prepare module structure
       run: |
         mkdir -p build/module/lib/arm64
+        
+        # Copy both libraries to the module structure
         cp artifacts/libaubo_rs.so build/module/lib/arm64/
+        cp artifacts/aubo_module.so build/module/lib/arm64/
+        
+        # Copy template files
         cp -r template/* build/module/
         cp aubo-rs.toml build/module/
         cp README.md build/module/
+        
+        # Verify both libraries are present
+        ls -la build/module/lib/arm64/
+        echo "Rust library size: $(stat -c%s build/module/lib/arm64/libaubo_rs.so) bytes"
+        echo "C++ module size: $(stat -c%s build/module/lib/arm64/aubo_module.so) bytes"
     
     - name: Process templates
       run: |
@@ -149,6 +243,55 @@ jobs:
         # Generate checksums
         sha256sum "aubo-rs-${{ steps.version.outputs.version }}.zip" > "aubo-rs-${{ steps.version.outputs.version }}.zip.sha256"
         md5sum "aubo-rs-${{ steps.version.outputs.version }}.zip" > "aubo-rs-${{ steps.version.outputs.version }}.zip.md5"
+    
+    - name: Validate final module package
+      run: |
+        echo "=== Validating final Magisk module package ==="
+        MODULE_ZIP="aubo-rs-${{ steps.version.outputs.version }}.zip"
+        
+        # Check ZIP contents
+        echo "Module ZIP contents:"
+        unzip -l "$MODULE_ZIP"
+        
+        # Extract and verify libraries
+        unzip -j "$MODULE_ZIP" "lib/arm64/*" -d temp_extract/
+        
+        if [ -f "temp_extract/libaubo_rs.so" ]; then
+          echo "✓ Rust library found in ZIP ($(stat -c%s temp_extract/libaubo_rs.so) bytes)"
+        else
+          echo "✗ Rust library missing from ZIP"
+          exit 1
+        fi
+        
+        if [ -f "temp_extract/aubo_module.so" ]; then
+          echo "✓ C++ ZygiskNext module found in ZIP ($(stat -c%s temp_extract/aubo_module.so) bytes)"
+        else
+          echo "✗ C++ ZygiskNext module missing from ZIP"
+          exit 1
+        fi
+        
+        # Verify zn_modules.txt
+        if unzip -p "$MODULE_ZIP" "zn_modules.txt" | grep -q "aubo_module"; then
+          echo "✓ zn_modules.txt correctly configured"
+        else
+          echo "✗ zn_modules.txt configuration issue"
+          exit 1
+        fi
+        
+        rm -rf temp_extract/
+        echo "=== Module package validation successful ==="
+        
+        # Show final module information
+        echo "=== Final Module Information ==="
+        echo "Module ZIP: $MODULE_ZIP"
+        echo "ZIP size: $(stat -c%s "$MODULE_ZIP") bytes"
+        echo "SHA256: $(cat "aubo-rs-${{ steps.version.outputs.version }}.zip.sha256")"
+        echo "Contents summary:"
+        echo "  ✓ Rust library (libaubo_rs.so) - Core filtering engine"
+        echo "  ✓ C++ module (aubo_module.so) - ZygiskNext integration"
+        echo "  ✓ Configuration files and scripts"
+        echo "  ✓ Installation and diagnostic tools"
+        echo "Ready for deployment!"
     
     - name: Upload module artifacts
       uses: actions/upload-artifact@v4

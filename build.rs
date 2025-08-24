@@ -35,15 +35,36 @@ fn build_cpp_module() {
     let target = env::var("TARGET").unwrap();
     let android_ndk = env::var("ANDROID_NDK_ROOT")
         .or_else(|_| env::var("NDK_HOME"))
-        .or_else(|_| env::var("ANDROID_NDK_HOME"))
-        .expect("ANDROID_NDK_ROOT, NDK_HOME, or ANDROID_NDK_HOME must be set");
+        .or_else(|_| env::var("ANDROID_NDK_HOME"));
     
-    let toolchain_file = format!("{}/build/cmake/android.toolchain.cmake", android_ndk);
+    // Only try to build C++ module if NDK is available
+    let ndk_path = match android_ndk {
+        Ok(path) => path,
+        Err(_) => {
+            println!("cargo:warning=Android NDK not found, skipping C++ module build");
+            return;
+        }
+    };
+    
+    let toolchain_file = format!("{}/build/cmake/android.toolchain.cmake", ndk_path);
+    if !std::path::Path::new(&toolchain_file).exists() {
+        println!("cargo:warning=CMake toolchain file not found, skipping C++ module build");
+        return;
+    }
+    
     let cpp_dir = PathBuf::from("src/cpp");
+    if !cpp_dir.exists() {
+        println!("cargo:warning=C++ source directory not found, skipping C++ module build");
+        return;
+    }
+    
     let build_dir = PathBuf::from("target").join(&target).join("cpp_build");
     
     // Create build directory
-    std::fs::create_dir_all(&build_dir).expect("Failed to create C++ build directory");
+    if let Err(e) = std::fs::create_dir_all(&build_dir) {
+        println!("cargo:warning=Failed to create C++ build directory: {}", e);
+        return;
+    }
     
     // Determine architecture
     let android_abi = match target.as_str() {
@@ -51,8 +72,24 @@ fn build_cpp_module() {
         "armv7-linux-androideabi" => "armeabi-v7a",
         "x86_64-linux-android" => "x86_64",
         "i686-linux-android" => "x86",
-        _ => panic!("Unsupported Android target: {}", target),
+        _ => {
+            println!("cargo:warning=Unsupported Android target for C++ build: {}", target);
+            return;
+        }
     };
+    
+    // Check if cmake is available
+    let cmake_available = Command::new("cmake")
+        .arg("--version")
+        .output()
+        .map(|output| output.status.success())
+        .unwrap_or(false);
+    
+    if !cmake_available {
+        println!("cargo:warning=CMake not found, skipping C++ module build");
+        println!("cargo:warning=Install CMake to build the full ZygiskNext module");
+        return;
+    }
     
     // Run CMake configure
     let cmake_status = Command::new("cmake")
@@ -61,7 +98,7 @@ fn build_cpp_module() {
         .arg("-DANDROID_ABI=".to_owned() + android_abi)
         .arg("-DANDROID_PLATFORM=android-29")
         .arg("-DCMAKE_BUILD_TYPE=Release")
-        .arg("../../src/cpp")
+        .arg("../../../src/cpp")
         .status();
     
     match cmake_status {
@@ -70,11 +107,11 @@ fn build_cpp_module() {
         }
         Ok(status) => {
             println!("cargo:warning=CMake configuration failed with exit code: {}", status);
-            return; // Don't fail the build, just warn
+            return;
         }
         Err(e) => {
-            println!("cargo:warning=Failed to run CMake (not found?): {}", e);
-            return; // Don't fail the build if CMake is not available
+            println!("cargo:warning=Failed to run CMake: {}", e);
+            return;
         }
     }
     
@@ -96,12 +133,18 @@ fn build_cpp_module() {
             let lib_dest = PathBuf::from("lib").join("aubo_module.so");
             
             if lib_source.exists() {
-                std::fs::create_dir_all("lib").ok();
+                if let Err(e) = std::fs::create_dir_all("lib") {
+                    println!("cargo:warning=Failed to create lib directory: {}", e);
+                    return;
+                }
+                
                 if let Err(e) = std::fs::copy(&lib_source, &lib_dest) {
                     println!("cargo:warning=Failed to copy C++ module: {}", e);
                 } else {
                     println!("C++ module copied to lib/aubo_module.so");
                 }
+            } else {
+                println!("cargo:warning=C++ module not found after build: {:?}", lib_source);
             }
         }
         Ok(status) => {
