@@ -220,14 +220,14 @@ static void onModuleConnected(int fd) {
 }
 
 // Export ZygiskNext module structure
-__attribute__((visibility("default"), unused))
+extern "C" __attribute__((visibility("default"), used))
 struct ZygiskNextModule zn_module = {
     .target_api_version = ZYGISK_NEXT_API_VERSION_1,
     .onModuleLoaded = onModuleLoaded,
 };
 
 // Export ZygiskNext companion module structure
-__attribute__((visibility("default"), unused))
+extern "C" __attribute__((visibility("default"), used))
 struct ZygiskNextCompanionModule zn_companion_module = {
     .target_api_version = ZYGISK_NEXT_API_VERSION_1,
     .onCompanionLoaded = onCompanionLoaded,

@@ -35,24 +35,23 @@ set_target_properties(aubo_module PROPERTIES
     LIBRARY_OUTPUT_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}"
 )
 
-# Strip symbols in release builds
+# Strip symbols in release builds (disabled to preserve ZygiskNext exports)
 if(CMAKE_BUILD_TYPE STREQUAL "Release")
-    set_target_properties(aubo_module PROPERTIES
-        LINK_FLAGS "-s"
-    )
+    # Keep symbols for ZygiskNext module loading
+    # set_target_properties(aubo_module PROPERTIES LINK_FLAGS "-s")
 endif()
 
 # Compiler flags
 target_compile_options(aubo_module PRIVATE
     -Wall
     -Wextra
-    -fvisibility=hidden
+    -fvisibility=default
     -ffunction-sections
     -fdata-sections
 )
 
 # Linker flags
 target_link_options(aubo_module PRIVATE
-    -Wl,--gc-sections
+    -Wl,--export-dynamic
     -Wl,--exclude-libs,ALL
 )

@@ -160,11 +160,17 @@ jobs:
           echo "✓ C++ module found: $CPP_MODULE"
           echo "Size: $(stat -c%s "$CPP_MODULE") bytes"
           
+          # Show all available symbols for debugging
+          echo "Available symbols in C++ module:"
+          $ANDROID_NDK_HOME/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-nm "$CPP_MODULE" 2>/dev/null | head -20 || echo "No symbols found or nm failed"
+          
           # Check for required ZygiskNext exports
           if $ANDROID_NDK_HOME/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-nm "$CPP_MODULE" | grep -q "zn_module"; then
             echo "✓ zn_module symbol found"
           else
             echo "✗ zn_module symbol missing"
+            echo "Available symbols containing 'zn':"
+            $ANDROID_NDK_HOME/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-nm "$CPP_MODULE" 2>/dev/null | grep -i zn || echo "No zn symbols found"
             exit 1
           fi
           
@@ -172,6 +178,8 @@ jobs:
             echo "✓ zn_companion_module symbol found"
           else
             echo "✗ zn_companion_module symbol missing"
+            echo "Available symbols containing 'companion':"
+            $ANDROID_NDK_HOME/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-nm "$CPP_MODULE" 2>/dev/null | grep -i companion || echo "No companion symbols found"
             exit 1
           fi
         else
