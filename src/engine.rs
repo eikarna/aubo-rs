@@ -1,11 +1,11 @@
 //! Filter engine for aubo-rs ad-blocking
 
-use std::collections::{HashMap, HashSet};
+use std::collections::HashSet;
 use std::sync::Arc;
 use std::time::Instant;
 
 use aho_corasick::AhoCorasick;
-use log::{debug, info, warn};
+use log::info;
 use parking_lot::RwLock;
 use regex::Regex;
 

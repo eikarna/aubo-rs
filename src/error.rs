@@ -3,7 +3,7 @@
 //! This module provides comprehensive error types for all aubo-rs operations,
 //! ensuring proper error handling and debugging capabilities.
 
-use std::fmt;
+
 use thiserror::Error;
 
 /// Main error type for aubo-rs operations

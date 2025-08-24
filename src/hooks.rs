@@ -1,7 +1,7 @@
 //! Network interception hooks for aubo-rs
 
 use std::collections::HashMap;
-use std::ffi::{CStr, CString};
+
 use std::net::IpAddr;
 use std::os::raw::c_void;
 use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};

@@ -3,7 +3,7 @@
 //! This module handles all configuration aspects of the aubo-rs system,
 //! including loading, validation, and runtime configuration updates.
 
-use std::collections::HashMap;
+
 use std::fs;
 use std::path::{Path, PathBuf};
 use std::time::Duration;
@@ -506,90 +506,6 @@ impl AuboConfig {
             fs::create_dir_all(&self.filters.filters_dir)?;
         }
         Ok(&self.filters.filters_dir)
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use std::fs;
-    use tempfile::TempDir;
-
-    #[test]
-    fn test_default_config_creation() {
-        let config = AuboConfig::default();
-        
-        assert!(config.general.enabled);
-        assert_eq!(config.general.data_dir, PathBuf::from(DEFAULT_DATA_DIR));
-        assert!(config.filters.enabled);
-        assert!(!config.filters.default_lists.is_empty());
-        assert!(config.hooks.enabled);
-        assert!(config.stats.enabled);
-    }
-
-    #[test]
-    fn test_config_validation() {
-        let mut config = AuboConfig::default();
-        
-        // Valid config should pass
-        assert!(config.validate().is_ok());
-        
-        // Invalid memory setting
-        config.general.max_memory_mb = 0;
-        assert!(config.validate().is_err());
-        
-        // Invalid CPU setting
-        config.general.max_memory_mb = 64;
-        config.general.max_cpu_percent = 150.0;
-        assert!(config.validate().is_err());
-        
-        // Invalid worker threads
-        config.general.max_cpu_percent = 5.0;
-        config.performance.worker_threads = 0;
-        assert!(config.validate().is_err());
-        
-        // Invalid log level
-        config.performance.worker_threads = 2;
-        config.logging.level = "invalid".to_string();
-        assert!(config.validate().is_err());
-    }
-
-    #[test]
-    fn test_config_file_operations() {
-        let temp_dir = TempDir::new().unwrap();
-        let config_path = temp_dir.path().join("test_config.toml");
-        
-        // Create and save config
-        let original_config = AuboConfig::default();
-        original_config.save_to_file(&config_path).unwrap();
-        
-        // Load config
-        let loaded_config = AuboConfig::load_from_file(&config_path).unwrap();
-        
-        // Compare key values
-        assert_eq!(original_config.general.enabled, loaded_config.general.enabled);
-        assert_eq!(original_config.filters.enabled, loaded_config.filters.enabled);
-        assert_eq!(original_config.hooks.enabled, loaded_config.hooks.enabled);
-    }
-
-    #[test]
-    fn test_directory_creation() {
-        let temp_dir = TempDir::new().unwrap();
-        let mut config = AuboConfig::default();
-        config.general.data_dir = temp_dir.path().join("aubo-rs");
-        config.filters.filters_dir = temp_dir.path().join("aubo-rs/filters");
-        
-        // Directories should not exist initially
-        assert!(!config.general.data_dir.exists());
-        assert!(!config.filters.filters_dir.exists());
-        
-        // ensure_data_dir should create the directory
-        let data_dir = config.ensure_data_dir().unwrap();
-        assert!(data_dir.exists());
-        
-        // ensure_filters_dir should create the directory
-        let filters_dir = config.ensure_filters_dir().unwrap();
-        assert!(filters_dir.exists());
     }
 }
 

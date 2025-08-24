@@ -134,7 +134,7 @@ impl FilterManager {
             name: "unknown".to_string(),
             url: url.to_string(),
             reason: "Network feature disabled".to_string(),
-        })
+        }.into())
     }
 
     /// Load filter list from local file
