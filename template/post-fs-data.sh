@@ -4,7 +4,7 @@
 # This runs early in the boot process
 
 DATA_DIR="/data/adb/aubo-rs"
-LOG_FILE="$DATA_DIR/boot.log"
+LOG_FILE="$DATA_DIR/logs/boot.log"
 
 # Ensure data directory exists
 mkdir -p "$DATA_DIR"
