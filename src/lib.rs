@@ -386,16 +386,16 @@ fn log_to_dmesg(message: &str) {
     
     // Append to debug log file with proper formatting
     let log_entry = format!("{}: {}\n", timestamp, message);
-    if let Ok(existing) = std::fs::read_to_string("/data/adb/aubo-rs/debug.log") {
-        let _ = std::fs::write("/data/adb/aubo-rs/debug.log", format!("{}{}", existing, log_entry));
+    if let Ok(existing) = std::fs::read_to_string("/data/adb/aubo-rs/logs/debug.log") {
+        let _ = std::fs::write("/data/adb/aubo-rs/logs/debug.log", format!("{}{}", existing, log_entry));
     } else {
-        let _ = std::fs::write("/data/adb/aubo-rs/debug.log", log_entry);
+        let _ = std::fs::write("/data/adb/aubo-rs/logs/debug.log", log_entry);
     }
     
     // Ensure file permissions are correct
     let _ = Command::new("chmod")
         .arg("644")
-        .arg("/data/adb/aubo-rs/debug.log")
+        .arg("/data/adb/aubo-rs/logs/debug.log")
         .output();
 }
 

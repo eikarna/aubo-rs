@@ -5,7 +5,7 @@ SONAME=@SONAME@
 VERSION="@VERSION@"
 MODULE_ID="aubo_rs"
 DATA_DIR="/data/adb/aubo-rs"
-INSTALL_LOG="$DATA_DIR/install.log"
+INSTALL_LOG="$DATA_DIR/logs/install.log"
 
 # Enhanced logging functions with multiple output streams
 log_info() {
@@ -195,7 +195,7 @@ cat > "$DATA_DIR/health_check.sh" << 'EOF'
 #!/system/bin/sh
 
 DATA_DIR="/data/adb/aubo-rs"
-LOG_FILE="$DATA_DIR/health.log"
+LOG_FILE="$DATA_DIR/logs/health.log"
 MODULE_PATH="/data/adb/modules/aubo_rs"
 
 echo "[$(date '+%Y-%m-%d %H:%M:%S')] === Comprehensive Health Check ===" >> "$LOG_FILE"
@@ -250,12 +250,12 @@ fi
 # Log Analysis
 echo "" >> "$LOG_FILE"
 echo "=== Log Analysis ===" >> "$LOG_FILE"
-if [ -f "$DATA_DIR/debug.log" ]; then
-    LINES=$(wc -l < "$DATA_DIR/debug.log" 2>/dev/null || echo "0")
+if [ -f "$DATA_DIR/logs/debug.log" ]; then
+    LINES=$(wc -l < "$DATA_DIR/logs/debug.log" 2>/dev/null || echo "0")
     echo "✓ Debug log: $LINES lines" >> "$LOG_FILE"
     if [ "$LINES" -gt 0 ]; then
         echo "Recent entries:" >> "$LOG_FILE"
-        tail -3 "$DATA_DIR/debug.log" | sed 's/^/  /' >> "$LOG_FILE"
+        tail -3 "$DATA_DIR/logs/debug.log" | sed 's/^/  /' >> "$LOG_FILE"
     fi
 else
     echo "⚠ Debug log: NOT FOUND" >> "$LOG_FILE"
@@ -315,8 +315,8 @@ else
 fi
 
 # Logging status
-if [ -f "/data/adb/aubo-rs/debug.log" ]; then
-    LINES=$(wc -l < "/data/adb/aubo-rs/debug.log" 2>/dev/null || echo "0")
+if [ -f "/data/adb/aubo-rs/logs/debug.log" ]; then
+    LINES=$(wc -l < "/data/adb/aubo-rs/logs/debug.log" 2>/dev/null || echo "0")
     if [ "$LINES" -gt 0 ]; then
         echo "✅ Debug logging: Active ($LINES entries)"
     else
@@ -342,7 +342,7 @@ echo "Live logging: logcat -s aubo-rs"
 echo "dmesg filter: dmesg | grep aubo-rs"
 echo "Debug info:   sh /data/adb/aubo-rs/debug_helper.sh"
 echo ""
-if [ ! -f "/data/adb/aubo-rs/debug.log" ] || [ "$DMESG_COUNT" -eq 0 ]; then
+if [ ! -f "/data/adb/aubo-rs/logs/debug.log" ] || [ "$DMESG_COUNT" -eq 0 ]; then
     echo "🔄 If module appears inactive, try rebooting your device"
 fi
 echo "========================================"

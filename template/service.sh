@@ -4,7 +4,7 @@
 # This runs after system boot is complete
 
 DATA_DIR="/data/adb/aubo-rs"
-LOG_FILE="$DATA_DIR/service.log"
+LOG_FILE="$DATA_DIR/logs/service.log"
 STATUS_FILE="$DATA_DIR/status.txt"
 MODULE_PROP="/data/adb/modules/aubo_rs/module.prop"
 
@@ -23,7 +23,7 @@ message=Service script starting, preparing module
 EOF
 
 # Verify module installation
-if [ ! -f "/data/adb/modules/aubo_rs/lib/aubo_rs.so" ]; then
+if [ ! -f "/data/adb/modules/aubo_rs/lib/libaubo_rs.so" ]; then
     log_service "ERROR: Native library not found"
     cat > "$STATUS_FILE" << EOF
 status=error
@@ -56,7 +56,7 @@ if [ -f "$MODULE_PROP" ]; then
     LIBRARY_STATUS="❌"
     
     # Check library
-    if [ -f "/data/adb/modules/aubo_rs/lib/aubo_rs.so" ]; then
+    if [ -f "/data/adb/modules/aubo_rs/lib/libaubo_rs.so" ]; then
         LIBRARY_STATUS="✅"
     fi
     
@@ -118,7 +118,7 @@ zygiskDetected=${ZYGISK_STATUS}
 libraryLoaded=${LIBRARY_STATUS}
 blockedRequests=${BLOCKED_COUNT}
 dataDirectory=$DATA_DIR
-nativeLibrary=/data/adb/modules/aubo_rs/lib/aubo_rs.so
+nativeLibrary=/data/adb/modules/aubo_rs/lib/libaubo_rs.so
 configFile=$DATA_DIR/aubo-rs.toml
 logFile=$LOG_FILE
 
@@ -145,7 +145,7 @@ version=$(grep "version=" "$MODULE_PROP" | cut -d'=' -f2)
 boot_time=$(uptime | awk '{print $3}' | sed 's/,//')
 api_level=$(getprop ro.build.version.sdk)
 zygisk_detected=$(if pgrep -f "zygisk" > /dev/null 2>&1; then echo "true"; else echo "false"; fi)
-library_exists=$(if [ -f "/data/adb/modules/aubo_rs/lib/aubo_rs.so" ]; then echo "true"; else echo "false"; fi)
+library_exists=$(if [ -f "/data/adb/modules/aubo_rs/lib/libaubo_rs.so" ]; then echo "true"; else echo "false"; fi)
 config_exists=$(if [ -f "$DATA_DIR/aubo-rs.toml" ]; then echo "true"; else echo "false"; fi)
 EOF
 
@@ -172,7 +172,7 @@ fi
             LIBRARY_STATUS="❌"
             
             # Check library
-            if [ -f "/data/adb/modules/aubo_rs/lib/aubo_rs.so" ]; then
+            if [ -f "/data/adb/modules/aubo_rs/lib/libaubo_rs.so" ]; then
                 LIBRARY_STATUS="✅"
             fi
             
@@ -213,7 +213,7 @@ fi
         fi
         
         # Quick health check
-        if [ ! -f "/data/adb/modules/aubo_rs/lib/aubo_rs.so" ]; then
+        if [ ! -f "/data/adb/modules/aubo_rs/lib/libaubo_rs.so" ]; then
             echo "[$(date '+%Y-%m-%d %H:%M:%S')] service: WARNING - Native library missing" >> "$LOG_FILE"
             sed -i "s/status=.*/status=error/" "$STATUS_FILE"
             sed -i "s/message=.*/message=Native library disappeared/" "$STATUS_FILE"
