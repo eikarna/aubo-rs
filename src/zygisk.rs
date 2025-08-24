@@ -351,17 +351,5 @@ fn log_dmesg(message: &str) {
         .output();
 }
 
-/// Export the ZygiskNext module structure
-#[no_mangle]
-pub static zn_module: ZygiskNextModule = ZygiskNextModule {
-    target_api_version: ZYGISK_NEXT_API_VERSION_1,
-    on_module_loaded,
-};
-
-/// Export the ZygiskNext companion module structure
-#[no_mangle]
-pub static zn_companion_module: ZygiskNextCompanionModule = ZygiskNextCompanionModule {
-    target_api_version: ZYGISK_NEXT_API_VERSION_1,
-    on_companion_loaded,
-    on_module_connected,
-};
+// Note: ZygiskNext module exports are handled in the C++ module (aubo_module.cpp)
+// The C++ module loads this Rust library dynamically and calls the exported C functions

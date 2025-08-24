@@ -1,1 +1,2 @@
-name=system_server companion lib/libaubo_rs.so
+aubo_module
+aubo_module:companion

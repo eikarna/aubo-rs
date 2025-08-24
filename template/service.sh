@@ -24,14 +24,26 @@ EOF
 
 # Verify module installation
 if [ ! -f "/data/adb/modules/aubo_rs/lib/libaubo_rs.so" ]; then
-    log_service "ERROR: Native library not found"
+    log_service "ERROR: Rust library not found"
     cat > "$STATUS_FILE" << EOF
 status=error
 time=$(date '+%Y-%m-%d %H:%M:%S')
-message=Native library missing - module not properly installed
+message=Rust library missing - module not properly installed
 EOF
     exit 1
 fi
+
+if [ ! -f "/data/adb/modules/aubo_rs/lib/aubo_module.so" ]; then
+    log_service "ERROR: C++ ZygiskNext module not found"
+    cat > "$STATUS_FILE" << EOF
+status=error
+time=$(date '+%Y-%m-%d %H:%M:%S')
+message=C++ ZygiskNext module missing - module not properly installed
+EOF
+    exit 1
+fi
+
+log_service "Both libraries verified successfully"
 
 # Check ZygiskNext status
 if ! pgrep -f "zygisk" > /dev/null 2>&1; then

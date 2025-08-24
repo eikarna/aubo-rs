@@ -126,22 +126,42 @@ for file in module.prop post-fs-data.sh service.sh zn_modules.txt sepolicy.rule;
     fi
 done
 
-# Extract native library
+# Extract native libraries
+log_info "Installing native libraries..."
 mkdir -p "$MODPATH/lib"
+
+# Extract Rust library
 if ! unzip -o "$ZIPFILE" "lib/arm64/lib$SONAME.so" -d "$MODPATH"; then
-    log_error "Failed to extract native library"
-    abort "! Failed to extract native library"
+    log_error "Failed to extract Rust library"
+    abort "! Failed to extract Rust library"
 fi
 
-# Move library to correct location
+# Extract C++ ZygiskNext module
+if ! unzip -o "$ZIPFILE" "lib/arm64/aubo_module.so" -d "$MODPATH"; then
+    log_error "Failed to extract C++ ZygiskNext module"
+    abort "! Failed to extract C++ ZygiskNext module"
+fi
+
+# Move Rust library to correct location
 if [ -f "$MODPATH/lib/arm64/lib$SONAME.so" ]; then
     mv "$MODPATH/lib/arm64/lib$SONAME.so" "$MODPATH/lib/lib$SONAME.so"
-    rm -rf "$MODPATH/lib/arm64"
-    log_info "Native library installed successfully"
+    log_info "✓ Rust library installed successfully"
 else
-    log_error "Native library not found after extraction"
-    abort "! Native library verification failed"
+    log_error "Rust library not found after extraction"
+    abort "! Rust library verification failed"
 fi
+
+# Move C++ module to correct location
+if [ -f "$MODPATH/lib/arm64/aubo_module.so" ]; then
+    mv "$MODPATH/lib/arm64/aubo_module.so" "$MODPATH/lib/aubo_module.so"
+    log_info "✓ C++ ZygiskNext module installed successfully"
+else
+    log_error "C++ ZygiskNext module not found after extraction"
+    abort "! C++ ZygiskNext module verification failed"
+fi
+
+# Clean up extraction directory
+rm -rf "$MODPATH/lib/arm64"
 
 log_info "Setting up data directory and configuration..."
 
@@ -217,9 +237,16 @@ echo "" >> "$LOG_FILE"
 echo "=== Critical Files ===" >> "$LOG_FILE"
 if [ -f "$MODULE_PATH/lib/libaubo_rs.so" ]; then
     SIZE=$(stat -c%s "$MODULE_PATH/lib/libaubo_rs.so" 2>/dev/null || echo "0")
-    echo "✓ Native library: $SIZE bytes" >> "$LOG_FILE"
+    echo "✓ Rust library: $SIZE bytes" >> "$LOG_FILE"
 else
-    echo "✗ Native library: MISSING" >> "$LOG_FILE"
+    echo "✗ Rust library: MISSING" >> "$LOG_FILE"
+fi
+
+if [ -f "$MODULE_PATH/lib/aubo_module.so" ]; then
+    SIZE=$(stat -c%s "$MODULE_PATH/lib/aubo_module.so" 2>/dev/null || echo "0")
+    echo "✓ C++ ZygiskNext module: $SIZE bytes" >> "$LOG_FILE"
+else
+    echo "✗ C++ ZygiskNext module: MISSING" >> "$LOG_FILE"
 fi
 
 if [ -f "$DATA_DIR/aubo-rs.toml" ]; then
