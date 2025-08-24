@@ -1,0 +1,199 @@
+# aubo-rs Configuration File
+# This is the main configuration file for the aubo-rs system-wide ad-blocker
+# Location: /data/adb/aubo-rs/aubo-rs.toml
+
+[general]
+# Enable/disable the entire aubo-rs system
+enabled = true
+
+# Data directory for storing filters, cache, and logs
+data_dir = "/data/adb/aubo-rs"
+
+# Debug mode for detailed logging (impacts performance)
+debug_mode = false
+
+# Maximum memory usage in MB (system will try to stay under this limit)
+max_memory_mb = 64
+
+# Maximum CPU usage percentage (system will throttle if exceeded)
+max_cpu_percent = 5.0
+
+# Interval for checking system updates
+update_check_interval = "24h"
+
+[filters]
+# Enable/disable filter engine
+enabled = true
+
+# Directory for storing filter lists
+filters_dir = "/data/adb/aubo-rs/filters"
+
+# Interval for automatic filter list updates
+update_interval = "6h"
+
+# Maximum number of filter rules to keep in memory
+max_rules = 100000
+
+# Enable filter rule compilation for better performance
+compile_rules = true
+
+# Cache compiled filters to disk
+cache_compiled = true
+
+# Domains that should never be blocked (whitelist)
+whitelist_domains = [
+    "googleapis.com",
+    "gstatic.com",
+    "android.com"
+]
+
+# Domains that should always be blocked (blacklist)
+blacklist_domains = [
+    "doubleclick.net",
+    "googleadservices.com"
+]
+
+# Custom filter rules (AdBlock Plus format)
+custom_rules = [
+    "||example-ads.com^",
+    "@@||trusted-ads.com^$important"
+]
+
+# Default filter lists to download and use
+[[filters.default_lists]]
+name = "EasyList"
+url = "https://easylist.to/easylist/easylist.txt"
+list_type = "EasyList"
+enabled = true
+priority = 100
+
+[[filters.default_lists]]
+name = "EasyPrivacy"
+url = "https://easylist.to/easylist/easyprivacy.txt"
+list_type = "EasyList"
+enabled = true
+priority = 90
+
+[[filters.default_lists]]
+name = "AdGuard Base"
+url = "https://filters.adtidy.org/extension/chromium/filters/2.txt"
+list_type = "AdGuard"
+enabled = true
+priority = 85
+
+[[filters.default_lists]]
+name = "uBlock Origin"
+url = "https://raw.githubusercontent.com/uBlockOrigin/uAssets/master/filters/filters.txt"
+list_type = "UBlockOrigin"
+enabled = true
+priority = 80
+
+[hooks]
+# Enable/disable network hooks
+enabled = true
+
+# Target processes to hook (empty = hook all processes)
+target_processes = []
+
+# Processes to exclude from hooking
+exclude_processes = [
+    "kernel",
+    "init",
+    "kthreadd",
+    "magisk",
+    "aubo-rs"
+]
+
+# Enable deep packet inspection for better filtering
+deep_inspection = true
+
+# Maximum request size to analyze (in bytes)
+max_request_size = 1048576  # 1MB
+
+# Request analysis timeout
+analysis_timeout = "100ms"
+
+# Network functions to hook
+[[hooks.hook_functions]]
+name = "getaddrinfo"
+library = "libc.so"
+enabled = true
+priority = 100
+
+[[hooks.hook_functions]]
+name = "gethostbyname"
+library = "libc.so"
+enabled = true
+priority = 90
+
+[[hooks.hook_functions]]
+name = "connect"
+library = "libc.so"
+enabled = true
+priority = 80
+
+[stats]
+# Enable/disable statistics collection
+enabled = true
+
+# File to store statistics
+stats_file = "/data/adb/aubo-rs/stats.json"
+
+# How often to collect statistics
+collection_interval = "1m"
+
+# How long to keep historical statistics
+retention_period = "7d"
+
+# Enable detailed request logging (impacts performance)
+detailed_logging = false
+
+# Maximum number of log entries to keep in memory
+max_log_entries = 10000
+
+# Enable performance metrics collection
+performance_metrics = true
+
+[performance]
+# Number of worker threads for processing requests
+worker_threads = 4
+
+# Size of the request processing queue
+request_queue_size = 1000
+
+# Size of the filter cache (number of entries)
+filter_cache_size = 10000
+
+# DNS resolution cache size
+dns_cache_size = 1000
+
+# DNS cache TTL (time to live)
+dns_cache_ttl = "5m"
+
+# Enable aggressive caching (uses more memory but faster)
+aggressive_caching = false
+
+# Memory pressure threshold (0.0-1.0)
+memory_pressure_threshold = 0.8
+
+# CPU pressure threshold (0.0-1.0)
+cpu_pressure_threshold = 0.7
+
+[logging]
+# Log level: error, warn, info, debug, trace
+level = "info"
+
+# Log file path (optional, set to disable file logging)
+log_file = "/data/adb/aubo-rs/aubo-rs.log"
+
+# Maximum log file size in MB
+max_file_size = 10
+
+# Number of log files to keep
+max_files = 5
+
+# Enable console logging (usually disabled on Android)
+console = false
+
+# Enable structured JSON logging
+structured = false

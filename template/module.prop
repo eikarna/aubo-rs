@@ -1,0 +1,6 @@
+id=${moduleId}
+name=${moduleName}
+version=${versionName}
+versionCode=${versionCode}
+author=eikarna
+description=System-wide ad-blocker for Android using Rust and ZygiskNext

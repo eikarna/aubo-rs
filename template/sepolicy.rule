@@ -1,0 +1,2 @@
+allow untrusted_app untrusted_app process execmem
+allow system_server system_server process execmem

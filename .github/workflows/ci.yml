@@ -1,0 +1,244 @@
+name: CI/CD Pipeline
+
+on:
+  push:
+    branches: [ main, develop ]
+  pull_request:
+    branches: [ main ]
+  release:
+    types: [ published ]
+
+env:
+  CARGO_TERM_COLOR: always
+  ANDROID_API_LEVEL: 29
+  NDK_VERSION: 27.1.12297006
+
+jobs:
+  test:
+    name: Test Suite
+    runs-on: ubuntu-latest
+    
+    steps:
+    - uses: actions/checkout@v4
+    
+    - name: Install Rust
+      uses: dtolnay/rust-toolchain@stable
+      with:
+        components: rustfmt, clippy
+    
+    - name: Cache dependencies
+      uses: actions/cache@v3
+      with:
+        path: |
+          ~/.cargo/registry
+          ~/.cargo/git
+          target
+        key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
+    
+    - name: Check formatting
+      run: cargo fmt -- --check
+    
+    - name: Run clippy
+      run: cargo clippy -- -D warnings
+    
+    - name: Run unit tests
+      run: cargo test --lib
+    
+    - name: Run integration tests
+      run: cargo test --test integration_tests
+    
+    - name: Run benchmarks
+      run: cargo bench --no-run
+
+  build-android:
+    name: Build for Android
+    runs-on: ubuntu-latest
+    needs: test
+    
+    strategy:
+      matrix:
+        build-type: [debug, release]
+    
+    steps:
+    - uses: actions/checkout@v4
+    
+    - name: Install Rust
+      uses: dtolnay/rust-toolchain@stable
+      with:
+        targets: aarch64-linux-android
+    
+    - name: Setup Android NDK
+      uses: nttld/setup-ndk@v1
+      with:
+        ndk-version: ${{ env.NDK_VERSION }}
+    
+    - name: Cache dependencies
+      uses: actions/cache@v3
+      with:
+        path: |
+          ~/.cargo/registry
+          ~/.cargo/git
+          target
+        key: ${{ runner.os }}-android-${{ matrix.build-type }}-${{ hashFiles('**/Cargo.lock') }}
+    
+    - name: Set up build environment
+      run: |
+        echo "CC_aarch64_linux_android=$ANDROID_NDK_HOME/toolchains/llvm/prebuilt/linux-x86_64/bin/aarch64-linux-android${{ env.ANDROID_API_LEVEL }}-clang" >> $GITHUB_ENV
+        echo "AR_aarch64_linux_android=$ANDROID_NDK_HOME/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-ar" >> $GITHUB_ENV
+        echo "CARGO_TARGET_AARCH64_LINUX_ANDROID_LINKER=$ANDROID_NDK_HOME/toolchains/llvm/prebuilt/linux-x86_64/bin/aarch64-linux-android${{ env.ANDROID_API_LEVEL }}-clang" >> $GITHUB_ENV
+    
+    - name: Build for Android
+      run: |
+        if [ "${{ matrix.build-type }}" = "release" ]; then
+          cargo build --target aarch64-linux-android --release
+        else
+          cargo build --target aarch64-linux-android
+        fi
+    
+    - name: Upload build artifacts
+      uses: actions/upload-artifact@v3
+      with:
+        name: libaubo_rs-${{ matrix.build-type }}
+        path: target/aarch64-linux-android/${{ matrix.build-type }}/libaubo_rs.so
+
+  package:
+    name: Package Magisk Module
+    runs-on: ubuntu-latest
+    needs: build-android
+    if: github.event_name == 'release' || github.ref == 'refs/heads/main'
+    
+    steps:
+    - uses: actions/checkout@v4
+    
+    - name: Download build artifacts
+      uses: actions/download-artifact@v3
+      with:
+        name: libaubo_rs-release
+        path: artifacts/
+    
+    - name: Generate version info
+      id: version
+      run: |
+        if [ "${{ github.event_name }}" = "release" ]; then
+          VERSION="${{ github.event.release.tag_name }}"
+        else
+          VERSION="dev-$(git rev-parse --short HEAD)"
+        fi
+        echo "version=$VERSION" >> $GITHUB_OUTPUT
+        echo "code=$(git rev-list --count HEAD)" >> $GITHUB_OUTPUT
+        echo "hash=$(git rev-parse --short HEAD)" >> $GITHUB_OUTPUT
+    
+    - name: Prepare module structure
+      run: |
+        mkdir -p build/module/lib/arm64
+        cp artifacts/libaubo_rs.so build/module/lib/arm64/
+        cp -r template/* build/module/
+        cp aubo-rs.toml build/module/
+        cp README.md build/module/
+    
+    - name: Process templates
+      run: |
+        sed -i "s/\${moduleId}/aubo_rs/g" build/module/module.prop
+        sed -i "s/\${moduleName}/aubo-rs/g" build/module/module.prop
+        sed -i "s/\${versionName}/${{ steps.version.outputs.version }} (${{ steps.version.outputs.code }}-${{ steps.version.outputs.hash }})/g" build/module/module.prop
+        sed -i "s/\${versionCode}/${{ steps.version.outputs.code }}/g" build/module/module.prop
+        
+        sed -i "s/@DEBUG@/false/g" build/module/customize.sh
+        sed -i "s/@SONAME@/aubo_rs/g" build/module/customize.sh
+        sed -i "s/@SUPPORTED_ABIS@/arm64/g" build/module/customize.sh
+        sed -i "s/@MIN_SDK@/${{ env.ANDROID_API_LEVEL }}/g" build/module/customize.sh
+    
+    - name: Create module ZIP
+      run: |
+        cd build/module
+        zip -r "../../aubo-rs-${{ steps.version.outputs.version }}.zip" . -x "*.git*"
+        cd ../..
+        
+        # Generate checksums
+        sha256sum "aubo-rs-${{ steps.version.outputs.version }}.zip" > "aubo-rs-${{ steps.version.outputs.version }}.zip.sha256"
+        md5sum "aubo-rs-${{ steps.version.outputs.version }}.zip" > "aubo-rs-${{ steps.version.outputs.version }}.zip.md5"
+    
+    - name: Upload module artifacts
+      uses: actions/upload-artifact@v3
+      with:
+        name: aubo-rs-module
+        path: |
+          aubo-rs-*.zip
+          aubo-rs-*.zip.sha256
+          aubo-rs-*.zip.md5
+    
+    - name: Upload to release
+      if: github.event_name == 'release'
+      uses: softprops/action-gh-release@v1
+      with:
+        files: |
+          aubo-rs-*.zip
+          aubo-rs-*.zip.sha256
+          aubo-rs-*.zip.md5
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  security-audit:
+    name: Security Audit
+    runs-on: ubuntu-latest
+    
+    steps:
+    - uses: actions/checkout@v4
+    
+    - name: Install Rust
+      uses: dtolnay/rust-toolchain@stable
+    
+    - name: Install cargo-audit
+      run: cargo install cargo-audit
+    
+    - name: Run security audit
+      run: cargo audit
+
+  performance-test:
+    name: Performance Testing
+    runs-on: ubuntu-latest
+    needs: test
+    
+    steps:
+    - uses: actions/checkout@v4
+    
+    - name: Install Rust
+      uses: dtolnay/rust-toolchain@stable
+    
+    - name: Cache dependencies
+      uses: actions/cache@v3
+      with:
+        path: |
+          ~/.cargo/registry
+          ~/.cargo/git
+          target
+        key: ${{ runner.os }}-perf-${{ hashFiles('**/Cargo.lock') }}
+    
+    - name: Run benchmarks
+      run: cargo bench
+    
+    - name: Upload benchmark results
+      uses: actions/upload-artifact@v3
+      with:
+        name: benchmark-results
+        path: target/criterion/
+
+  documentation:
+    name: Generate Documentation
+    runs-on: ubuntu-latest
+    
+    steps:
+    - uses: actions/checkout@v4
+    
+    - name: Install Rust
+      uses: dtolnay/rust-toolchain@stable
+    
+    - name: Generate docs
+      run: cargo doc --no-deps
+    
+    - name: Upload documentation
+      if: github.ref == 'refs/heads/main'
+      uses: actions/upload-artifact@v3
+      with:
+        name: documentation
+        path: target/doc/
