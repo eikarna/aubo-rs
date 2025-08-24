@@ -6,6 +6,7 @@
 #include <sys/socket.h>
 #include <netdb.h>
 #include <netinet/in.h>
+#include <errno.h>
 
 #include "zygisk_next_api.h"
 
@@ -74,20 +75,30 @@ static int my_getaddrinfo(const char *node, const char *service, const struct ad
 }
 
 static bool load_rust_library() {
-    // Try different possible library locations
+    // Try different possible library locations based on actual module installation
     const char* lib_paths[] = {
-        "/data/adb/modules/aubo_rs/lib/libaubo_rs.so",
-        "/data/adb/modules/aubo_rs/lib/aubo_rs.so",
-        "libaubo_rs.so"
+        "/data/adb/modules/aubo_rs/lib/libaubo_rs.so",  // Primary location
+        "/data/adb/aubo-rs/lib/libaubo_rs.so",          // Data directory fallback
+        "./libaubo_rs.so",                              // Current directory
+        "libaubo_rs.so"                                 // System library path
     };
     
     for (const char* path : lib_paths) {
+        // Check if file exists first
+        if (access(path, F_OK) == 0) {
+            LOGI("File exists, attempting to load: %s", path);
+        } else {
+            LOGD("File not found: %s (errno: %d)", path, errno);
+            continue;
+        }
+        
         rust_lib_handle = dlopen(path, RTLD_LAZY);
         if (rust_lib_handle) {
             LOGI("Successfully loaded Rust library from: %s", path);
             break;
         } else {
-            LOGD("Failed to load Rust library from %s: %s", path, dlerror());
+            const char* error = dlerror();
+            LOGD("Failed to load Rust library from %s: %s", path, error ? error : "unknown error");
         }
     }
     

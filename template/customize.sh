@@ -131,7 +131,7 @@ log_info "Installing native libraries..."
 mkdir -p "$MODPATH/lib"
 
 # Extract Rust library
-if ! unzip -o "$ZIPFILE" "lib/arm64/lib$SONAME.so" -d "$MODPATH"; then
+if ! unzip -o "$ZIPFILE" "lib/arm64/libaubo_rs.so" -d "$MODPATH"; then
     log_error "Failed to extract Rust library"
     abort "! Failed to extract Rust library"
 fi
@@ -142,19 +142,21 @@ if ! unzip -o "$ZIPFILE" "lib/arm64/aubo_module.so" -d "$MODPATH"; then
     abort "! Failed to extract C++ ZygiskNext module"
 fi
 
-# Move Rust library to correct location
-if [ -f "$MODPATH/lib/arm64/lib$SONAME.so" ]; then
-    mv "$MODPATH/lib/arm64/lib$SONAME.so" "$MODPATH/lib/lib$SONAME.so"
-    log_info "✓ Rust library installed successfully"
+# Move Rust library to correct location for C++ module to find
+if [ -f "$MODPATH/lib/arm64/libaubo_rs.so" ]; then
+    # Keep original name and place where C++ module expects it
+    mv "$MODPATH/lib/arm64/libaubo_rs.so" "$MODPATH/lib/libaubo_rs.so"
+    log_info "✓ Rust library installed at $MODPATH/lib/libaubo_rs.so"
 else
     log_error "Rust library not found after extraction"
     abort "! Rust library verification failed"
 fi
 
-# Move C++ module to correct location
+# Move C++ module to correct location for ZygiskNext
 if [ -f "$MODPATH/lib/arm64/aubo_module.so" ]; then
+    # This is the actual ZygiskNext module that gets loaded
     mv "$MODPATH/lib/arm64/aubo_module.so" "$MODPATH/lib/aubo_module.so"
-    log_info "✓ C++ ZygiskNext module installed successfully"
+    log_info "✓ C++ ZygiskNext module installed at $MODPATH/lib/aubo_module.so"
 else
     log_error "C++ ZygiskNext module not found after extraction"
     abort "! C++ ZygiskNext module verification failed"
