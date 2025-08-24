@@ -86,7 +86,7 @@ log_info "✓ Android API check passed: $API"
 
 # Enhanced ZygiskNext detection and validation
 log_info "Checking ZygiskNext installation..."
-ZYGISK_MODULE_PATH="/data/adb/modules/zygisk_next"
+ZYGISK_MODULE_PATH="/data/adb/modules/zygisksu"
 if [ ! -d "$ZYGISK_MODULE_PATH" ]; then
     log_error "ZygiskNext module not found at $ZYGISK_MODULE_PATH"
     log_error "This module requires ZygiskNext to function properly"
@@ -231,8 +231,8 @@ fi
 # ZygiskNext Status
 echo "" >> "$LOG_FILE"
 echo "=== ZygiskNext Status ===" >> "$LOG_FILE"
-if [ -d "/data/adb/modules/zygisk_next" ]; then
-    if [ -f "/data/adb/modules/zygisk_next/disable" ]; then
+if [ -d "/data/adb/modules/zygisksu" ]; then
+    if [ -f "/data/adb/modules/zygisksu/disable" ]; then
         echo "⚠ ZygiskNext: DISABLED" >> "$LOG_FILE"
     else
         echo "✓ ZygiskNext: ENABLED" >> "$LOG_FILE"
@@ -306,9 +306,9 @@ else
 fi
 
 # ZygiskNext
-if [ -d "/data/adb/modules/zygisk_next" ] && [ ! -f "/data/adb/modules/zygisk_next/disable" ]; then
+if [ -d "/data/adb/modules/zygisksu" ] && [ ! -f "/data/adb/modules/zygisksu/disable" ]; then
     echo "✅ ZygiskNext: Active"
-elif [ -d "/data/adb/modules/zygisk_next" ]; then
+elif [ -d "/data/adb/modules/zygisksu" ]; then
     echo "⚠️ ZygiskNext: Disabled"
 else
     echo "❌ ZygiskNext: Not installed"

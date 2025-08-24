@@ -124,7 +124,7 @@ logFile=$LOG_FILE
 
 # ZygiskNext Integration
 zygiskProcessActive=$(if pgrep -f "zygisk" > /dev/null 2>&1; then echo "true"; else echo "false"; fi)
-zygiskModule=$(if [ -f "/data/adb/modules/zygisk_next/module.prop" ]; then echo "true"; else echo "false"; fi)
+zygiskModule=$(if [ -f "/data/adb/modules/zygisksu/module.prop" ]; then echo "true"; else echo "false"; fi)
 
 # Diagnostics
 lastHealthCheck=pending

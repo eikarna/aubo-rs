@@ -300,7 +300,7 @@ pub fn initialize_from_zygisk() -> Result<()> {
     
     // Verify ZygiskNext environment
     log_to_dmesg("Verifying ZygiskNext environment...");
-    if std::path::Path::new("/data/adb/modules/zygisk_next").exists() {
+    if std::path::Path::new("/data/adb/modules/zygisksu").exists() {
         log_to_dmesg("ZygiskNext module detected");
     } else {
         log_to_dmesg("WARNING: ZygiskNext module directory not found");
@@ -461,7 +461,7 @@ fn update_module_prop_status(status: &str, message: &str) {
         // Get current system information for dynamic description
         let hooks_status = if status == "running" { "✅" } else { "❌" };
         let filter_status = if status == "running" { "✅" } else { "❌" };
-        let zygisk_status = if std::path::Path::new("/data/adb/modules/zygisk_next").exists() { "✅" } else { "❌" };
+        let zygisk_status = if std::path::Path::new("/data/adb/modules/zygisksu").exists() { "✅" } else { "❌" };
         let library_status = if std::path::Path::new("/data/adb/modules/aubo_rs/lib/aubo_rs.so").exists() { "✅" } else { "❌" };
         
         // Get blocked count from stats if available
