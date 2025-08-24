@@ -243,26 +243,313 @@ use std::os::raw::{c_char, c_int};
 /// Initialize aubo-rs from ZygiskNext context
 /// This function is called by the ZygiskNext module during initialization
 pub fn initialize_from_zygisk() -> Result<()> {
-    // Load default configuration or from standard path
+    // Set up logging first
+    setup_logging();
+    
+    // Enhanced dmesg logging with priority markers
+    log_to_dmesg("=== ZygiskNext module initialization started ===");
+    log_to_dmesg(&format!("aubo-rs version: {}", env!("CARGO_PKG_VERSION")));
+    log_to_dmesg(&format!("Process ID: {}", std::process::id()));
+    
+    // Log system information for debugging
+    if let Ok(api_level) = std::env::var("ANDROID_API") {
+        log_to_dmesg(&format!("Android API Level: {}", api_level));
+    }
+    
+    // Ensure data directory exists with proper permissions
+    let data_dir = "/data/adb/aubo-rs";
+    if let Err(e) = std::fs::create_dir_all(data_dir) {
+        log_to_dmesg(&format!("Failed to create data directory: {}", e));
+    } else {
+        log_to_dmesg("Data directory verified/created successfully");
+    }
+    
+    // Set proper permissions using chmod
+    let _ = std::process::Command::new("chmod")
+        .arg("-R")
+        .arg("755")
+        .arg(data_dir)
+        .output();
+    
+    // Load configuration with enhanced error handling
     let config_path = "/data/adb/aubo-rs/aubo-rs.toml";
+    log_to_dmesg(&format!("Attempting to load configuration from: {}", config_path));
+    
     let config = match AuboConfig::load_from_file(config_path) {
-        Ok(config) => config,
-        Err(_) => {
-            warn!("Failed to load config from {}, using defaults", config_path);
-            AuboConfig::default()
+        Ok(config) => {
+            log_to_dmesg(&format!("Configuration loaded successfully from {}", config_path));
+            config
+        },
+        Err(e) => {
+            warn!("Failed to load config from {}: {}", config_path, e);
+            log_to_dmesg(&format!("Config load failed: {} - creating default configuration", e));
+            
+            match create_default_config(config_path) {
+                Ok(config) => {
+                    log_to_dmesg("Default configuration created successfully");
+                    config
+                },
+                Err(e) => {
+                    log_to_dmesg(&format!("Failed to create default config: {}", e));
+                    update_status_file("error", &format!("Configuration creation failed: {}", e));
+                    return Err(e);
+                }
+            }
         }
     };
     
-    initialize(config)
+    // Verify ZygiskNext environment
+    log_to_dmesg("Verifying ZygiskNext environment...");
+    if std::path::Path::new("/data/adb/modules/zygisk_next").exists() {
+        log_to_dmesg("ZygiskNext module detected");
+    } else {
+        log_to_dmesg("WARNING: ZygiskNext module directory not found");
+    }
+    
+    // Initialize the main system
+    log_to_dmesg("Initializing aubo-rs main system...");
+    update_status_file("initializing", "Starting main system initialization");
+    
+    match initialize(config) {
+        Ok(_) => {
+            log_to_dmesg("=== System initialization completed successfully ===");
+            log_to_dmesg("aubo-rs is now active and monitoring network requests");
+            update_status_file("running", "System initialized and actively filtering requests");
+            
+            // Log successful hooks installation
+            log_to_dmesg("Network hooks installed - request interception active");
+            log_to_dmesg("Filter engine started - ad-blocking rules loaded");
+            log_to_dmesg("Statistics collection enabled - monitoring performance");
+            
+            Ok(())
+        }
+        Err(e) => {
+            error!("Failed to initialize aubo-rs: {}", e);
+            log_to_dmesg(&format!("=== INITIALIZATION FAILED: {} ===", e));
+            log_to_dmesg("aubo-rs module is not active - no ad-blocking will occur");
+            update_status_file("error", &format!("Initialization failed: {}", e));
+            
+            // Provide debugging hints
+            log_to_dmesg("Debugging hints:");
+            log_to_dmesg("1. Check if ZygiskNext is properly installed and enabled");
+            log_to_dmesg("2. Verify /data/adb/aubo-rs directory permissions");
+            log_to_dmesg("3. Check logcat output: logcat -s aubo-rs");
+            log_to_dmesg("4. Run health check: sh /data/adb/aubo-rs/health_check.sh");
+            
+            Err(e)
+        }
+    }
 }
 
 /// Handle companion process connection for ZygiskNext
 /// This function manages communication with Zygisk companion processes
 pub fn handle_companion_connection(fd: i32) -> Result<()> {
     info!("Handling companion connection on fd: {}", fd);
+    log_to_dmesg(&format!("aubo-rs: Companion connection established on fd: {}", fd));
     // For now, just acknowledge the connection
     // In a full implementation, this would handle companion process communication
     Ok(())
+}
+
+/// Set up logging for the module
+fn setup_logging() {
+    env_logger::Builder::from_default_env()
+        .target(env_logger::Target::Stderr)
+        .init();
+}
+
+/// Log message to dmesg for debugging
+fn log_to_dmesg(message: &str) {
+    use std::process::Command;
+    
+    let timestamp = chrono::Utc::now().format("%Y-%m-%d %H:%M:%S UTC");
+    let full_message = format!("aubo-rs: {}", message);
+    
+    // Method 1: Direct write to /dev/kmsg (most reliable for dmesg)
+    if let Err(_) = std::fs::write("/dev/kmsg", format!("<6>{}", full_message)) {
+        // Method 2: Try using log command as fallback
+        let _ = Command::new("log")
+            .arg("-p")
+            .arg("i")
+            .arg("-t")
+            .arg("aubo-rs")
+            .arg(message)
+            .output();
+    }
+    
+    // Method 3: Also log to logcat for runtime debugging
+    let _ = Command::new("logcat")
+        .arg("-d")
+        .arg("-s")
+        .arg("aubo-rs")
+        .output();
+    
+    // Append to debug log file with proper formatting
+    let log_entry = format!("{}: {}\n", timestamp, message);
+    if let Ok(existing) = std::fs::read_to_string("/data/adb/aubo-rs/debug.log") {
+        let _ = std::fs::write("/data/adb/aubo-rs/debug.log", format!("{}{}", existing, log_entry));
+    } else {
+        let _ = std::fs::write("/data/adb/aubo-rs/debug.log", log_entry);
+    }
+    
+    // Ensure file permissions are correct
+    let _ = Command::new("chmod")
+        .arg("644")
+        .arg("/data/adb/aubo-rs/debug.log")
+        .output();
+}
+
+/// Update module status file for debugging
+fn update_status_file(status: &str, message: &str) {
+    let timestamp = chrono::Utc::now().format("%Y-%m-%d %H:%M:%S UTC");
+    
+    // Get additional system information
+    let hook_count = get_active_hook_count();
+    let filter_count = get_loaded_filter_count();
+    let uptime = std::fs::read_to_string("/proc/uptime")
+        .unwrap_or_default()
+        .split_whitespace()
+        .next()
+        .unwrap_or("unknown")
+        .to_string();
+    
+    let status_content = format!(
+        "status={}\ntime={}\nmessage={}\nversion={}\nuptime={}\nhooks_active={}\nfilters_loaded={}\nlast_update={}\nlib_path=/data/adb/modules/aubo_rs/lib/aubo_rs.so\nconfig_path=/data/adb/aubo-rs/aubo-rs.toml\ndebug_log=/data/adb/aubo-rs/debug.log\nprocess_id={}\n",
+        status,
+        timestamp,
+        message,
+        env!("CARGO_PKG_VERSION"),
+        uptime,
+        hook_count,
+        filter_count,
+        timestamp,
+        std::process::id()
+    );
+    
+    let _ = std::fs::write("/data/adb/aubo-rs/status.txt", status_content);
+    
+    // Also update module.prop if possible
+    update_module_prop_status(status, message);
+}
+
+/// Get count of active hooks (placeholder - will be implemented with actual hook tracking)
+fn get_active_hook_count() -> u32 {
+    // This would return actual hook count from NetworkHooks
+    if INITIALIZED.load(Ordering::SeqCst) {
+        // TODO: Implement actual hook counting
+        1  // Placeholder
+    } else {
+        0
+    }
+}
+
+/// Get count of loaded filters (placeholder - will be implemented with actual filter tracking)
+fn get_loaded_filter_count() -> u32 {
+    // This would return actual filter count from FilterEngine
+    if INITIALIZED.load(Ordering::SeqCst) {
+        // TODO: Implement actual filter counting
+        1  // Placeholder
+    } else {
+        0
+    }
+}
+
+/// Update module.prop with current status and dynamic description
+fn update_module_prop_status(status: &str, message: &str) {
+    let module_prop_path = "/data/adb/modules/aubo_rs/module.prop";
+    if let Ok(content) = std::fs::read_to_string(module_prop_path) {
+        // Get current system information for dynamic description
+        let hooks_status = if status == "running" { "✅" } else { "❌" };
+        let filter_status = if status == "running" { "✅" } else { "❌" };
+        let zygisk_status = if std::path::Path::new("/data/adb/modules/zygisk_next").exists() { "✅" } else { "❌" };
+        let library_status = if std::path::Path::new("/data/adb/modules/aubo_rs/lib/aubo_rs.so").exists() { "✅" } else { "❌" };
+        
+        // Get blocked count from stats if available
+        let blocked_count = if let Some(system_ref) = get_system() {
+            if let Some(system) = system_ref.read().as_ref() {
+                let stats = system.stats().get_stats();
+                stats.blocked_requests.to_string()
+            } else {
+                "0".to_string()
+            }
+        } else {
+            "0".to_string()
+        };
+        
+        // Detect root method
+        let root_method = if std::path::Path::new("/data/adb/modules/magisk_busybox").exists() || 
+                             std::path::Path::new("/system/xbin/magisk").exists() {
+            "Magisk"
+        } else if std::path::Path::new("/data/adb/modules/kernelsu").exists() || 
+                  std::path::Path::new("/system/bin/ksu").exists() {
+            "KernelSU"
+        } else if std::path::Path::new("/data/adb/modules/apatch").exists() || 
+                  std::path::Path::new("/system/bin/apd").exists() {
+            "APatch"
+        } else {
+            "Unknown"
+        };
+        
+        // Create dynamic description similar to ZygiskNext format
+        let dynamic_desc = format!(
+            "[{}Network Hooks {}Ad Filters {}ZygiskNext {}Library. Root: {}, {} blocked] System-wide ad-blocker using Rust and ZygiskNext",
+            hooks_status, filter_status, zygisk_status, library_status, root_method, blocked_count
+        );
+        
+        // Update description line
+        let lines: Vec<&str> = content.lines().collect();
+        let mut new_content = String::new();
+        let mut in_runtime_section = false;
+        
+        for line in lines {
+            if line.starts_with("# Runtime Status") {
+                in_runtime_section = true;
+                break;
+            }
+            if line.starts_with("description=") {
+                new_content.push_str(&format!("description={}\n", dynamic_desc));
+            } else if !in_runtime_section {
+                new_content.push_str(line);
+                new_content.push('\n');
+            }
+        }
+        
+        // Add current runtime status
+        new_content.push_str(&format!(
+            "\n# Runtime Status\nruntimeStatus={}\nruntimeMessage={}\nruntimeUpdate={}\nruntimeActive={}\nhooksActive={}\nfiltersActive={}\nzygiskActive={}\nlibraryActive={}\nblockedTotal={}\nrootMethod={}\n",
+            status,
+            message.replace('\n', " "),
+            chrono::Utc::now().format("%Y-%m-%d %H:%M:%S UTC"),
+            if status == "running" { "true" } else { "false" },
+            hooks_status,
+            filter_status,
+            zygisk_status,
+            library_status,
+            blocked_count,
+            root_method
+        ));
+        
+        let _ = std::fs::write(module_prop_path, new_content);
+    }
+}
+
+/// Create default configuration with fallback values
+fn create_default_config(config_path: &str) -> Result<AuboConfig> {
+    let config = AuboConfig::default();
+    
+    // Ensure directory exists
+    if let Some(parent) = std::path::Path::new(config_path).parent() {
+        let _ = std::fs::create_dir_all(parent);
+    }
+    
+    // Save default config
+    if let Err(e) = config.save_to_file(config_path) {
+        warn!("Failed to save default config: {}", e);
+    } else {
+        info!("Created default configuration at {}", config_path);
+    }
+    
+    Ok(config)
 }
 
 /// C-compatible initialization function

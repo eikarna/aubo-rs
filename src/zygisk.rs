@@ -304,23 +304,51 @@ unsafe extern "C" fn on_module_loaded(self_handle: *mut c_void, api: *const Zygi
     unsafe {
         init_zygisk_api(api, self_handle);
     }
+    
+    // Log to dmesg for debugging
+    log_dmesg("aubo-rs: ZygiskNext module loaded, API initialized");
 
     // Call the Rust initialization
     if let Err(e) = crate::initialize_from_zygisk() {
         log::error!("Failed to initialize aubo-rs from ZygiskNext: {}", e);
+        log_dmesg(&format!("aubo-rs: CRITICAL - Initialization failed: {}", e));
+    } else {
+        log_dmesg("aubo-rs: Module loaded and initialized successfully");
     }
 }
 
 /// Companion loaded callback implementation
 unsafe extern "C" fn on_companion_loaded() {
     log::info!("aubo-rs companion module loaded");
+    log_dmesg("aubo-rs: Companion module loaded");
 }
 
 /// Module connected callback implementation
 unsafe extern "C" fn on_module_connected(fd: c_int) {
+    log_dmesg(&format!("aubo-rs: Module connected with fd: {}", fd));
     if let Err(e) = crate::handle_companion_connection(fd) {
         log::error!("Failed to handle companion connection: {}", e);
+        log_dmesg(&format!("aubo-rs: Companion connection failed: {}", e));
     }
+}
+
+/// Simple dmesg logging function
+fn log_dmesg(message: &str) {
+    use std::process::Command;
+    
+    // Try multiple logging methods
+    let _ = Command::new("log")
+        .arg("-t")
+        .arg("aubo-rs")
+        .arg(message)
+        .output();
+        
+    // Also try direct syslog
+    let _ = Command::new("logger")
+        .arg("-t")
+        .arg("aubo-rs")
+        .arg(message)
+        .output();
 }
 
 /// Export the ZygiskNext module structure
