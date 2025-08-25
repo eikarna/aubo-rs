@@ -8,6 +8,34 @@
 #include <netinet/in.h>
 #include <errno.h>
 
+// For memfd_create and ashmem
+#ifdef __NR_memfd_create
+#include <sys/syscall.h>
+#ifndef MFD_CLOEXEC
+#define MFD_CLOEXEC 0x0001U
+#endif
+#endif
+
+// For ashmem fallback
+#include <sys/ioctl.h>
+#ifndef ASHMEM_SET_SIZE
+#define ASHMEM_SET_SIZE _IOW('d', 3, size_t)
+#endif
+
+// For Android versions that might not have memfd_create
+#ifndef __NR_memfd_create
+#ifdef __aarch64__
+#define __NR_memfd_create 279
+#elif defined(__arm__)
+#define __NR_memfd_create 385
+#else
+#define __NR_memfd_create -1  // Not supported
+#endif
+#endif
+#include <fcntl.h>
+#include <sys/mman.h>
+#include <sys/stat.h>
+
 #include "zygisk_next_api.h"
 
 #define LOGD(...) __android_log_print(ANDROID_LOG_DEBUG, "aubo-rs", __VA_ARGS__)
@@ -74,36 +102,168 @@ static int my_getaddrinfo(const char *node, const char *service, const struct ad
     return old_getaddrinfo(node, service, hints, res);
 }
 
+// Load library using memfd to bypass SELinux restrictions
+static void* load_library_via_memfd(const char* path) {
+    LOGI("Attempting memfd loading for: %s", path);
+    
+    // Open source file
+    int source_fd = open(path, O_RDONLY);
+    if (source_fd < 0) {
+        LOGD("Failed to open source file %s: errno %d", path, errno);
+        return nullptr;
+    }
+    
+    // Get file size
+    struct stat st;
+    if (fstat(source_fd, &st) < 0) {
+        LOGE("Failed to get file size for %s: errno %d", path, errno);
+        close(source_fd);
+        return nullptr;
+    }
+    
+    off_t file_size = st.st_size;
+    LOGD("Source file size: %ld bytes", file_size);
+    
+    // Create memory file descriptor
+    int memfd = -1;
+    
+    // Try memfd_create first (Android 8+)
+    if (__NR_memfd_create != -1) {
+        memfd = syscall(__NR_memfd_create, "aubo_rs_lib", MFD_CLOEXEC);
+        if (memfd >= 0) {
+            LOGD("Created memfd using memfd_create: fd %d", memfd);
+        } else {
+            LOGD("memfd_create failed: errno %d", errno);
+        }
+    } else {
+        LOGD("memfd_create not supported on this architecture");
+    }
+    
+    // Fallback to anonymous mmap + ashmem if memfd_create failed
+    if (memfd < 0) {
+        // Try opening ashmem
+        memfd = open("/dev/ashmem", O_RDWR);
+        if (memfd >= 0) {
+            // Set size using ioctl (ashmem specific)
+            if (ioctl(memfd, ASHMEM_SET_SIZE, file_size) < 0) {
+                LOGE("Failed to set ashmem size: errno %d", errno);
+                close(memfd);
+                close(source_fd);
+                return nullptr;
+            }
+            LOGD("Created memfd using ashmem: fd %d", memfd);
+        }
+    }
+    
+    if (memfd < 0) {
+        LOGE("Failed to create memory file descriptor: errno %d", errno);
+        close(source_fd);
+        return nullptr;
+    }
+    
+    // For regular memfd, set the size
+    if (ftruncate(memfd, file_size) < 0) {
+        LOGE("Failed to set memfd size: errno %d", errno);
+        close(memfd);
+        close(source_fd);
+        return nullptr;
+    }
+    
+    // Copy file contents to memory fd
+    char buffer[8192];
+    off_t copied = 0;
+    ssize_t bytes_read, bytes_written;
+    
+    while (copied < file_size) {
+        bytes_read = read(source_fd, buffer, sizeof(buffer));
+        if (bytes_read <= 0) {
+            if (bytes_read < 0) {
+                LOGE("Failed to read from source file: errno %d", errno);
+            }
+            break;
+        }
+        
+        bytes_written = write(memfd, buffer, bytes_read);
+        if (bytes_written != bytes_read) {
+            LOGE("Failed to write to memfd: expected %ld, wrote %ld, errno %d", 
+                 bytes_read, bytes_written, errno);
+            break;
+        }
+        
+        copied += bytes_written;
+    }
+    
+    close(source_fd);
+    
+    if (copied != file_size) {
+        LOGE("Incomplete copy: %ld/%ld bytes", copied, file_size);
+        close(memfd);
+        return nullptr;
+    }
+    
+    LOGI("Successfully copied %ld bytes to memfd", copied);
+    
+    // Create path for dlopen
+    std::string memfd_path = "/proc/self/fd/" + std::to_string(memfd);
+    LOGD("Loading library via: %s", memfd_path.c_str());
+    
+    // Load library from memory fd
+    void* handle = dlopen(memfd_path.c_str(), RTLD_NOW);
+    
+    if (!handle) {
+        const char* error = dlerror();
+        LOGE("Failed to dlopen memfd: %s", error ? error : "unknown error");
+        close(memfd);
+        return nullptr;
+    }
+    
+    LOGI("Successfully loaded library via memfd");
+    
+    // Keep memfd open - it will be closed when the process exits
+    // Don't close(memfd) here as dlopen needs it to remain valid
+    
+    return handle;
+}
+
 static bool load_rust_library() {
-    // Try different possible library locations based on actual module installation
+    // Try different possible library locations
     const char* lib_paths[] = {
         "/data/adb/modules/aubo_rs/lib/libaubo_rs.so",  // Primary location
         "/data/adb/aubo-rs/lib/libaubo_rs.so",          // Data directory fallback
-        "./libaubo_rs.so",                              // Current directory
-        "libaubo_rs.so"                                 // System library path
+        "/system/lib64/libaubo_rs.so",                  // System fallback
+        "/vendor/lib64/libaubo_rs.so"                   // Vendor fallback
     };
     
     for (const char* path : lib_paths) {
-        // Check if file exists first
-        if (access(path, F_OK) == 0) {
-            LOGI("File exists, attempting to load: %s", path);
-        } else {
-            LOGD("File not found: %s (errno: %d)", path, errno);
+        // Check if file exists and is readable
+        if (access(path, R_OK) != 0) {
+            LOGD("File not accessible: %s (errno: %d)", path, errno);
             continue;
         }
         
-        rust_lib_handle = dlopen(path, RTLD_LAZY);
+        LOGI("Found library file: %s, attempting memfd loading", path);
+        
+        // Try memfd loading first (bypass SELinux)
+        rust_lib_handle = load_library_via_memfd(path);
         if (rust_lib_handle) {
-            LOGI("Successfully loaded Rust library from: %s", path);
+            LOGI("Successfully loaded Rust library via memfd from: %s", path);
+            break;
+        }
+        
+        // Fallback to direct loading (may fail due to SELinux)
+        LOGD("Memfd loading failed, trying direct dlopen for: %s", path);
+        rust_lib_handle = dlopen(path, RTLD_NOW);
+        if (rust_lib_handle) {
+            LOGI("Successfully loaded Rust library via direct dlopen from: %s", path);
             break;
         } else {
             const char* error = dlerror();
-            LOGD("Failed to load Rust library from %s: %s", path, error ? error : "unknown error");
+            LOGD("Direct dlopen failed for %s: %s", path, error ? error : "unknown error");
         }
     }
     
     if (!rust_lib_handle) {
-        LOGE("Failed to load Rust library from any location");
+        LOGE("Failed to load Rust library from any location using any method");
         return false;
     }
     

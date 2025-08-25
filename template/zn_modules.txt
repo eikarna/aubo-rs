@@ -1,2 +1,1 @@
 name=netd companion lib/aubo_module.so
-path=lib/libaubo_rs.so lib/aubo_module.so
