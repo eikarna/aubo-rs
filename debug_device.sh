@@ -51,6 +51,33 @@ if [ -d "$MODULE_PATH" ]; then
     fi
     echo ""
     
+    echo "System library overlay:"
+    if [ -d "$MODULE_PATH/system/lib64" ]; then
+        ls -la "$MODULE_PATH/system/lib64"
+        echo ""
+        
+        echo "System library details:"
+        for file in "$MODULE_PATH/system/lib64"/*; do
+            if [ -f "$file" ]; then
+                echo "  $(basename "$file"): $(stat -c '%s bytes, perms: %a, owner: %u:%g' "$file")"
+                
+                # Check if this file will appear in system
+                SYSTEM_PATH="/system/lib64/$(basename "$file")"
+                if [ -f "$SYSTEM_PATH" ]; then
+                    echo "    System overlay active: YES"
+                    SYSTEM_CONTEXT=$(ls -lZ "$SYSTEM_PATH" 2>/dev/null | awk '{print $4}' || echo "unknown")
+                    echo "    System file context: $SYSTEM_CONTEXT"
+                else
+                    echo "    System overlay active: NO (file not visible in /system/lib64/)"
+                fi
+            fi
+        done
+    else
+        echo "⚠ System library overlay not found"
+        echo "  This may cause SELinux access issues"
+    fi
+    echo ""
+    
     echo "Configuration files:"
     for file in module.prop zn_modules.txt; do
         if [ -f "$MODULE_PATH/$file" ]; then
@@ -210,16 +237,21 @@ fi
 
 echo ""
 echo "=== Recommendations ==="
-if [ ! -f "$MODULE_PATH/lib/libaubo_rs.so" ]; then
-    echo "- Reinstall the module - Rust library is missing"
-elif [ ! -f "$MODULE_PATH/lib/aubo_module.so" ]; then
+if [ ! -f "$MODULE_PATH/lib/aubo_module.so" ]; then
     echo "- Reinstall the module - C++ module is missing"
+elif [ ! -f "$MODULE_PATH/system/lib64/libaubo_rs.so" ]; then
+    echo "- Reinstall the module - System library overlay is missing"
+    echo "- This is required to bypass SELinux restrictions"
+elif [ ! -f "/system/lib64/libaubo_rs.so" ]; then
+    echo "- System library overlay not active - check Magisk/KSU status"
+    echo "- Reboot may be required for overlay to take effect"
 elif [ -f "$ZYGISK_PATH/disable" ]; then
     echo "- Enable ZygiskNext in Magisk Manager"
 else
     echo "- Try rebooting the device"
     echo "- Check logcat for additional error details: logcat -s aubo-rs"
-    echo "- Ensure you have the latest module version"
+    echo "- Verify SELinux policy is loaded: dmesg | grep sepolicy"
+    echo "- Check for AVC denials: dmesg | grep avc | grep aubo"
 fi
 
 echo ""

@@ -126,9 +126,11 @@ for file in module.prop post-fs-data.sh service.sh zn_modules.txt sepolicy.rule;
     fi
 done
 
-# Extract native libraries
-log_info "Installing native libraries..."
-mkdir -p "$MODPATH/lib"
+# Extract native libraries and install via system overlay
+log_info "Installing native libraries via system overlay..."
+
+# Create system library directories for Magisk overlay
+mkdir -p "$MODPATH/system/lib64"
 
 # Extract Rust library
 if ! unzip -o "$ZIPFILE" "lib/arm64/libaubo_rs.so" -d "$MODPATH"; then
@@ -136,27 +138,27 @@ if ! unzip -o "$ZIPFILE" "lib/arm64/libaubo_rs.so" -d "$MODPATH"; then
     abort "! Failed to extract Rust library"
 fi
 
-# Extract C++ ZygiskNext module
+# Extract C++ ZygiskNext module  
 if ! unzip -o "$ZIPFILE" "lib/arm64/aubo_module.so" -d "$MODPATH"; then
     log_error "Failed to extract C++ ZygiskNext module"
     abort "! Failed to extract C++ ZygiskNext module"
 fi
 
-# Move Rust library to correct location for C++ module to find
+# Install Rust library in system path for accessibility
 if [ -f "$MODPATH/lib/arm64/libaubo_rs.so" ]; then
-    # Keep original name and place where C++ module expects it
-    mv "$MODPATH/lib/arm64/libaubo_rs.so" "$MODPATH/lib/libaubo_rs.so"
-    log_info "✓ Rust library installed at $MODPATH/lib/libaubo_rs.so"
+    # Install to system/lib64 via Magisk overlay (accessible to netd)
+    cp "$MODPATH/lib/arm64/libaubo_rs.so" "$MODPATH/system/lib64/libaubo_rs.so"
+    log_info "✓ Rust library installed at system/lib64/libaubo_rs.so (via overlay)"
 else
     log_error "Rust library not found after extraction"
     abort "! Rust library verification failed"
 fi
 
-# Move C++ module to correct location for ZygiskNext
+# Install C++ module for ZygiskNext loading
 if [ -f "$MODPATH/lib/arm64/aubo_module.so" ]; then
-    # This is the actual ZygiskNext module that gets loaded
+    # Keep in module lib directory for ZygiskNext
     mv "$MODPATH/lib/arm64/aubo_module.so" "$MODPATH/lib/aubo_module.so"
-    log_info "✓ C++ ZygiskNext module installed at $MODPATH/lib/aubo_module.so"
+    log_info "✓ C++ ZygiskNext module installed at lib/aubo_module.so"
 else
     log_error "C++ ZygiskNext module not found after extraction"
     abort "! C++ ZygiskNext module verification failed"

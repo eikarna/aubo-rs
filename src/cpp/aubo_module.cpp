@@ -35,6 +35,8 @@
 #include <fcntl.h>
 #include <sys/mman.h>
 #include <sys/stat.h>
+#include <sys/syscall.h>
+#include <sys/xattr.h>
 
 #include "zygisk_next_api.h"
 
@@ -226,12 +228,12 @@ static void* load_library_via_memfd(const char* path) {
 }
 
 static bool load_rust_library() {
-    // Try different possible library locations
+    // Try different possible library locations, prioritizing system paths
     const char* lib_paths[] = {
-        "/data/adb/modules/aubo_rs/lib/libaubo_rs.so",  // Primary location
-        "/data/adb/aubo-rs/lib/libaubo_rs.so",          // Data directory fallback
-        "/system/lib64/libaubo_rs.so",                  // System fallback
-        "/vendor/lib64/libaubo_rs.so"                   // Vendor fallback
+        "/system/lib64/libaubo_rs.so",                  // Primary: System overlay (accessible to netd)
+        "/vendor/lib64/libaubo_rs.so",                   // Vendor fallback
+        "/data/adb/modules/aubo_rs/lib/libaubo_rs.so",  // Module path (may fail due to SELinux)
+        "/data/adb/aubo-rs/lib/libaubo_rs.so"            // Data directory fallback
     };
     
     for (const char* path : lib_paths) {
@@ -241,16 +243,16 @@ static bool load_rust_library() {
             continue;
         }
         
-        LOGI("Found library file: %s, attempting memfd loading", path);
+        LOGI("Found library file: %s, attempting to load", path);
         
-        // Try memfd loading first (bypass SELinux)
+        // Try memfd loading first (bypass SELinux if needed)
         rust_lib_handle = load_library_via_memfd(path);
         if (rust_lib_handle) {
             LOGI("Successfully loaded Rust library via memfd from: %s", path);
             break;
         }
         
-        // Fallback to direct loading (may fail due to SELinux)
+        // Fallback to direct loading (should work for system paths)
         LOGD("Memfd loading failed, trying direct dlopen for: %s", path);
         rust_lib_handle = dlopen(path, RTLD_NOW);
         if (rust_lib_handle) {
@@ -386,27 +388,59 @@ static void onCompanionLoaded() {
 
 static void onModuleConnected(int fd) {
     LOGI("aubo-rs module connected with fd: %d", fd);
-    auto native_lib = "/data/adb/modules/aubo_rs/lib/libaubo_rs.so";
+    
+    // Check both potential library locations
+    const char* lib_paths[] = {
+        "/system/lib64/libaubo_rs.so",                  // System overlay location
+        "/data/adb/modules/aubo_rs/lib/libaubo_rs.so"   // Module location fallback
+    };
+    
+    const char* native_lib = nullptr;
     struct stat st{};
-    if (stat(native_lib, &st) < 0) {
-        LOGD("no native_lib file found");
+    
+    // Find which library path exists
+    for (const char* path : lib_paths) {
+        if (stat(path, &st) == 0) {
+            native_lib = path;
+            LOGD("Found library at: %s", path);
+            break;
+        }
+    }
+    
+    if (!native_lib) {
+        LOGD("No native library file found in any location");
         close(fd);
         return;
     }
 
-    // netd needs to access libaubo_rs.so file socket
-    auto system_file = "u:object_r:system_file:s0";
-    syscall(__NR_setxattr, native_lib, XATTR_NAME_SELINUX, system_file, strlen(system_file) + 1, 0);
+    // For files in /data/adb, dynamically set SELinux context so netd can access them
+    if (strncmp(native_lib, "/data/adb/", 10) == 0) {
+        auto system_file = "u:object_r:system_file:s0";
+        if (syscall(__NR_setxattr, native_lib, XATTR_NAME_SELINUX, system_file, strlen(system_file) + 1, 0) == 0) {
+            LOGI("Successfully updated SELinux context for: %s", native_lib);
+        } else {
+            LOGD("Failed to update SELinux context for %s: errno %d", native_lib, errno);
+        }
+    } else {
+        LOGD("Library in system path, no SELinux update needed: %s", native_lib);
+    }
 
     auto lib_fd = open(native_lib, O_RDONLY | O_CLOEXEC);
     if (lib_fd < 0) {
-        LOGD("failed to open native_lib file");
+        LOGD("Failed to open library file: errno %d", errno);
         close(fd);
         return;
     }
-    socket_utils::send_fd(fd, lib_fd);
+    
+    // Send file descriptor to companion (simplified socket_utils implementation)
+    int fd_to_send = lib_fd;
+    if (send(fd, &fd_to_send, sizeof(fd_to_send), 0) < 0) {
+        LOGE("Failed to send file descriptor: errno %d", errno);
+    } else {
+        LOGI("Successfully sent library file descriptor");
+    }
+    
     close(lib_fd);
-    // need to be closed unconditionally
     close(fd);
 }
 

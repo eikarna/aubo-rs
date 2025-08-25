@@ -1,1 +1,2 @@
 allow netd netd process execmem
+allow netd system_file file { read open getattr execute }
