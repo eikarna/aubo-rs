@@ -386,7 +386,27 @@ static void onCompanionLoaded() {
 
 static void onModuleConnected(int fd) {
     LOGI("aubo-rs module connected with fd: %d", fd);
-    // For now, just close the connection
+    auto native_lib = "/data/adb/modules/aubo_rs/lib/libaubo_rs.so";
+    struct stat st{};
+    if (stat(native_lib, &st) < 0) {
+        LOGD("no native_lib file found");
+        close(fd);
+        return;
+    }
+
+    // netd needs to access libaubo_rs.so file socket
+    auto system_file = "u:object_r:system_file:s0";
+    syscall(__NR_setxattr, native_lib, XATTR_NAME_SELINUX, system_file, strlen(system_file) + 1, 0);
+
+    auto lib_fd = open(native_lib, O_RDONLY | O_CLOEXEC);
+    if (lib_fd < 0) {
+        LOGD("failed to open native_lib file");
+        close(fd);
+        return;
+    }
+    socket_utils::send_fd(fd, lib_fd);
+    close(lib_fd);
+    // need to be closed unconditionally
     close(fd);
 }
 
